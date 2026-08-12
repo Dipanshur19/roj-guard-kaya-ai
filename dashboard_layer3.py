@@ -10,6 +10,7 @@ Run locally:
 import json
 import os
 import re
+import hashlib
 from collections import Counter
 from datetime import date
 
@@ -17,6 +18,13 @@ import pandas as pd
 import requests
 import streamlit as st
 import streamlit.components.v1 as components
+
+from real_data_lab import (
+    CANONICAL_FIELDS, suggest_column_mapping, excel_sheet_names, read_tabular_bytes,
+    normalize_dataset, validate_dataset, build_real_feature_frames,
+    train_real_data_models, score_with_real_model, score_with_prototype_model,
+    template_csv_bytes,
+)
 
 BACKEND_URL = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000")
 
@@ -206,6 +214,31 @@ div[data-testid="stRadio"] [role="radiogroup"] label:has(input:checked):after{co
 @media(max-width:700px){.block-container{padding-top:.55rem!important}.rg-topbar{top:6px!important;padding:10px 11px!important;border-radius:18px!important}.rg-brand-sub{display:none!important}.rg-logo{width:38px!important;height:38px!important;border-radius:13px!important}.rg-status-wrap .rg-trust{display:none!important}div[data-testid="stRadio"]{top:67px!important;margin-bottom:12px!important}div[data-testid="stRadio"] [role="radiogroup"]{justify-content:flex-start!important;overflow-x:auto!important;width:max-content!important;min-width:100%!important}.rg-control-strip{display:none!important}.rg-title{font-size:1.95rem!important}.rg-card:hover,.rg-kpi:hover,.rg-pipe-step:hover,.rg-risk-copy:hover{transform:none!important}.rg-signal-rail{overflow-x:auto;white-space:nowrap}}
 @media(max-width:430px){.rg-topbar .rg-status{padding:6px 8px!important}.rg-status-wrap{gap:5px!important}.rg-brand-title{font-size:1rem!important}.rg-title{font-size:1.72rem!important}.rg-subtitle{font-size:.80rem!important}}
 
+/* ========================================================================== 
+   FINAL JUDGE DASHBOARD OVERRIDES
+   ========================================================================== */
+.block-container{max-width:1660px!important;padding-left:clamp(.8rem,2.4vw,2.5rem)!important;padding-right:clamp(.8rem,2.4vw,2.5rem)!important;padding-top:.75rem!important}
+.rg-title{font-size:clamp(1.55rem,2vw,2.05rem)!important;line-height:1.08!important;letter-spacing:-.038em!important;margin:.24rem 0 .26rem!important;background:none!important;color:#f4f8fc!important;animation:none!important}
+.rg-subtitle{font-size:clamp(.82rem,.92vw,.94rem)!important;line-height:1.58!important;margin-bottom:.9rem!important;max-width:980px!important;color:#8194aa!important}
+.rg-eyebrow{font-size:.60rem!important;letter-spacing:.15em!important}.rg-section{font-size:1.02rem!important;margin-top:1.25rem!important}
+.rg-topbar{position:sticky!important;top:10px!important;z-index:1000!important;max-width:1580px!important;margin:0 auto 7px!important;border-radius:22px!important;padding:10px 14px!important;background:linear-gradient(180deg,rgba(10,22,40,.78),rgba(5,14,28,.68))!important;border:1px solid rgba(169,211,244,.12)!important;backdrop-filter:blur(30px) saturate(160%)!important;-webkit-backdrop-filter:blur(30px) saturate(160%)!important;box-shadow:0 26px 70px rgba(0,0,0,.34),0 8px 28px rgba(38,125,195,.06),inset 0 1px 0 rgba(255,255,255,.07)!important}
+.rg-topbar:after{content:"";position:absolute;left:5%;right:5%;bottom:-1px;height:1px;background:linear-gradient(90deg,transparent,rgba(76,201,255,.28),rgba(151,116,255,.20),transparent);pointer-events:none}.rg-brand-sub{font-size:.64rem!important}.rg-trust{font-size:.65rem!important}
+div[data-testid="stRadio"]{position:sticky!important;top:78px!important;z-index:995!important;max-width:1580px!important;width:100%!important;margin:0 auto 15px!important;filter:drop-shadow(0 20px 36px rgba(0,0,0,.28))!important}
+div[data-testid="stRadio"]>div{overflow-x:auto!important;overflow-y:hidden!important;scrollbar-width:none!important}div[data-testid="stRadio"]>div::-webkit-scrollbar{display:none!important}
+div[data-testid="stRadio"] [role="radiogroup"]{display:flex!important;flex-direction:row!important;flex-wrap:nowrap!important;align-items:center!important;justify-content:space-between!important;gap:4px!important;width:100%!important;min-width:1120px!important;padding:6px!important;border-radius:18px!important;background:linear-gradient(180deg,rgba(9,20,36,.82),rgba(5,14,27,.72))!important;border:1px solid rgba(169,211,244,.11)!important;backdrop-filter:blur(28px) saturate(160%)!important;-webkit-backdrop-filter:blur(28px) saturate(160%)!important;box-shadow:0 20px 55px rgba(0,0,0,.26),inset 0 1px 0 rgba(255,255,255,.055)!important}
+div[data-testid="stRadio"] [role="radiogroup"] label{flex:1 1 auto!important;min-width:max-content!important;justify-content:center!important;padding:7px 10px!important;border-radius:11px!important;white-space:nowrap!important}div[data-testid="stRadio"] [role="radiogroup"] p{font-size:clamp(.64rem,.69vw,.74rem)!important;font-weight:660!important;white-space:nowrap!important}
+.rg-pipeline,.rg-pipe-step,.rg-control-strip,.rg-signal-rail{display:none!important}
+.rg-dashboard-label{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:2px 0 9px}.rg-dashboard-title{font-size:1.62rem;font-weight:820;letter-spacing:-.04em;color:#f4f8fc}.rg-dashboard-meta{font-size:.70rem;color:#6f839a}
+.rg-dashboard-grid{display:grid;grid-template-columns:1.02fr .98fr 1.08fr;gap:12px;margin:12px 0 14px}.rg-dashboard-panel{min-height:252px;padding:17px 18px;border-radius:19px;border:1px solid rgba(176,216,248,.10);background:linear-gradient(145deg,rgba(13,29,50,.62),rgba(5,15,28,.54));backdrop-filter:blur(24px) saturate(145%);-webkit-backdrop-filter:blur(24px) saturate(145%);box-shadow:0 22px 65px rgba(0,0,0,.23),inset 0 1px 0 rgba(255,255,255,.045);position:relative;overflow:hidden}.rg-dashboard-panel:before{content:"";position:absolute;left:8%;right:8%;top:0;height:1px;background:linear-gradient(90deg,transparent,rgba(104,208,255,.38),transparent)}
+.rg-dash-panel-title{font-size:.86rem;font-weight:780;color:#eef6ff}.rg-dash-panel-sub{font-size:.67rem;color:#657b93;margin-top:3px;margin-bottom:13px}
+.rg-exposure-row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)}.rg-exposure-row:last-child{border-bottom:0}.rg-exposure-name{font-size:.73rem;color:#a7b8ca}.rg-exposure-name small{display:block;color:#5f748c;font-size:.62rem;margin-top:2px}.rg-exposure-value{font-size:1.04rem;font-weight:830;color:#f4f8fc}.rg-meter{height:5px;border-radius:99px;background:rgba(95,116,140,.16);overflow:hidden;margin-top:6px}.rg-meter span{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#42c6ff,#7d78ff,#ffb44a);box-shadow:0 0 14px rgba(66,198,255,.22)}
+.rg-priority-list{display:grid;gap:7px}.rg-priority-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 10px;border:1px solid rgba(255,255,255,.055);border-radius:11px;background:rgba(6,16,30,.35)}.rg-priority-name{font-size:.72rem;font-weight:720;color:#dbe9f6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rg-priority-meta{font-size:.61rem;color:#60758d;margin-top:2px}.rg-priority-score{font-size:.88rem;font-weight:840;color:#fff}.rg-risk-mini{height:3px;border-radius:99px;background:rgba(255,255,255,.07);margin-top:5px;overflow:hidden}.rg-risk-mini span{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#ffb24a,#ff6a6a)}
+.rg-activity-compact{display:grid;gap:8px}.rg-activity-row{display:grid;grid-template-columns:8px 1fr;gap:9px;align-items:start}.rg-activity-dot{width:7px;height:7px;margin-top:5px;border-radius:50%;background:#4cc9ff;box-shadow:0 0 0 4px rgba(76,201,255,.06),0 0 13px rgba(76,201,255,.36)}.rg-activity-title{font-size:.70rem;color:#d7e5f2;font-weight:680}.rg-activity-detail{font-size:.61rem;color:#60758d;line-height:1.4;margin-top:2px}
+.rg-compact-stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}.rg-compact-stat{padding:10px 11px;border-radius:12px;border:1px solid rgba(255,255,255,.06);background:rgba(8,20,36,.42)}.rg-compact-stat span{display:block;font-size:.57rem;letter-spacing:.08em;text-transform:uppercase;color:#60758d}.rg-compact-stat b{display:block;font-size:1.02rem;color:#f4f8fc;margin-top:4px}
+.rg-card{padding:15px 16px!important}.rg-kpi{min-height:96px!important;padding:13px 14px!important}.rg-kpi-value{font-size:1.62rem!important}.rg-kpi-note{font-size:.64rem!important}.rg-panel-sub{margin-bottom:10px!important}.rg-glass-banner{padding:15px 17px!important;margin:7px 0 12px!important}.rg-glass-banner h3{font-size:.94rem!important}.rg-glass-banner p{font-size:.72rem!important}
+@media(max-width:1180px){.rg-dashboard-grid{grid-template-columns:1fr 1fr}.rg-dashboard-panel:last-child{grid-column:1/-1}.rg-status-wrap .rg-control-pill{display:none!important}}
+@media(max-width:760px){.block-container{padding-left:.65rem!important;padding-right:.65rem!important}.rg-topbar{top:6px!important;border-radius:18px!important}.rg-topbar .rg-trust{display:none!important}div[data-testid="stRadio"]{top:65px!important;margin-bottom:10px!important}div[data-testid="stRadio"] [role="radiogroup"]{min-width:980px!important;justify-content:flex-start!important}.rg-dashboard-grid{grid-template-columns:1fr}.rg-dashboard-panel:last-child{grid-column:auto}.rg-dashboard-panel{min-height:0}.rg-compact-stat-row{grid-template-columns:1fr 1fr}.rg-dashboard-title{font-size:1.38rem}.rg-dashboard-meta{display:none}.rg-title{font-size:1.42rem!important}}
+
 </style>
 """,
     unsafe_allow_html=True,
@@ -358,21 +391,6 @@ def material_options():
 
 
 
-def render_intelligence_pipeline(active="Predict"):
-    steps = [
-        ("01", "Ingest", "POs, emails, logistics"),
-        ("02", "Link", "Entity + project context"),
-        ("03", "Predict", "Lead time + ROJ risk"),
-        ("04", "Act", "Human-governed mitigation"),
-    ]
-    html = '<div class="rg-pipeline">'
-    for num, title, desc in steps:
-        cls = ' active' if title.lower() == str(active).lower() else ''
-        html += f'<div class="rg-pipe-step{cls}"><div class="rg-pipe-num">{num} • Layer</div><div class="rg-pipe-title">{title}</div><div class="rg-pipe-desc">{desc}</div></div>'
-    html += '</div>'
-    st.markdown(html, unsafe_allow_html=True)
-
-
 def render_risk_donut(high, medium, low):
     total = max(high + medium + low, 1)
     hp = high / total * 100
@@ -462,6 +480,54 @@ h1{{font-size:clamp(30px,3.7vw,54px);line-height:.98;letter-spacing:-.055em;marg
     components.html(html, height=iframe_h, scrolling=False)
 
 
+
+def render_dashboard_hero(metrics):
+    """Large evaluator-facing spatial dashboard; Three.js is visual only."""
+    metric_html = "".join(f'<div class="metric"><span>{label}</span><b>{value}</b></div>' for label, value in metrics[:4])
+    html = f"""<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+*{{box-sizing:border-box}}html,body{{margin:0;background:transparent;overflow:hidden;font-family:Inter,system-ui,-apple-system,'Segoe UI',sans-serif;color:#f4f8fc}}
+.hero{{height:474px;position:relative;overflow:hidden;border-radius:28px;border:1px solid rgba(182,222,252,.12);background:radial-gradient(650px 360px at 73% 44%,rgba(45,157,229,.09),transparent 62%),radial-gradient(460px 280px at 92% 12%,rgba(123,91,246,.07),transparent 70%),linear-gradient(135deg,#06101e 0%,#050b15 58%,#07101f 100%);box-shadow:0 38px 120px rgba(0,0,0,.38),inset 0 1px 0 rgba(255,255,255,.06)}}
+.hero:before{{content:'';position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(90deg,rgba(4,10,19,.98) 0%,rgba(4,10,19,.90) 35%,rgba(4,10,19,.35) 56%,rgba(4,10,19,.03) 78%),linear-gradient(180deg,transparent 55%,rgba(3,8,16,.30) 100%)}}
+.hero:after{{content:'';position:absolute;inset:0;z-index:1;pointer-events:none;opacity:.10;background-image:linear-gradient(rgba(137,188,229,.13) 1px,transparent 1px),linear-gradient(90deg,rgba(137,188,229,.13) 1px,transparent 1px);background-size:54px 54px;mask-image:linear-gradient(90deg,transparent 18%,#000 58%,#000)}}
+#scene{{position:absolute;inset:0}}canvas{{width:100%!important;height:100%!important}}.copy{{position:absolute;z-index:3;left:clamp(26px,3.2vw,50px);top:50%;transform:translateY(-50%);width:min(610px,48%)}}
+.kicker{{display:flex;align-items:center;gap:8px;color:#73d8ff;text-transform:uppercase;letter-spacing:.16em;font-size:9px;font-weight:800}}.pulse{{width:7px;height:7px;border-radius:50%;background:#4cc9ff;box-shadow:0 0 0 5px rgba(76,201,255,.06),0 0 20px rgba(76,201,255,.65);animation:pulse 1.9s ease-in-out infinite}}
+h1{{font-size:clamp(31px,3.15vw,47px);line-height:1.01;letter-spacing:-.052em;margin:14px 0 12px;max-width:600px;color:#f8fbff;font-weight:820}}p{{font-size:13px;line-height:1.62;color:#8498ae;margin:0;max-width:580px}}
+.metrics{{display:grid;grid-template-columns:repeat(4,minmax(96px,1fr));gap:8px;margin-top:23px;max-width:560px}}.metric{{padding:10px 11px;border-radius:13px;border:1px solid rgba(186,222,251,.10);background:linear-gradient(145deg,rgba(16,32,53,.52),rgba(6,16,30,.42));backdrop-filter:blur(16px);box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 14px 34px rgba(0,0,0,.15)}}.metric span{{display:block;font-size:7px;text-transform:uppercase;letter-spacing:.10em;color:#647a91;font-weight:760}}.metric b{{display:block;font-size:18px;color:#f6f9fc;margin-top:4px;letter-spacing:-.03em}}
+.live{{position:absolute;z-index:3;right:20px;top:18px;display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:999px;border:1px solid rgba(78,201,255,.12);background:rgba(4,13,25,.50);backdrop-filter:blur(14px);font-size:8px;color:#7fa9bd;text-transform:uppercase;letter-spacing:.10em}}.live i{{width:6px;height:6px;border-radius:50%;background:#34d399;box-shadow:0 0 12px rgba(52,211,153,.65)}}
+.legend{{position:absolute;z-index:3;right:20px;bottom:18px;padding:8px 10px;border:1px solid rgba(186,222,251,.09);border-radius:11px;background:rgba(4,13,25,.45);backdrop-filter:blur(14px);font-size:8px;color:#6d849b}}.legend b{{color:#a8d9ed;font-weight:700}}@keyframes pulse{{0%,100%{{opacity:.45;transform:scale(.90)}}50%{{opacity:1;transform:scale(1.1)}}}}
+@media(max-width:800px){{.hero{{height:430px;border-radius:20px}}.copy{{left:20px;right:18px;top:30px;transform:none;width:auto;max-width:91%}}h1{{font-size:31px;max-width:88%}}p{{font-size:11px;max-width:84%}}.metrics{{grid-template-columns:1fr 1fr;max-width:280px;margin-top:16px}}.metric{{padding:8px 9px}}.metric b{{font-size:15px}}.live,.legend{{display:none}}}}
+</style></head><body><div class="hero"><div id="scene"></div><div class="copy"><div class="kicker"><span class="pulse"></span>Live procurement intelligence</div><h1>Predict procurement risk before it impacts the schedule.</h1><p>ROJ Guard connects vendor updates, purchase orders, shipments and Required-On-Job constraints into one live risk view, then prepares mitigation while every outbound action remains under human control.</p><div class="metrics">{metric_html}</div></div><div class="live"><i></i>Spatial project graph online</div><div class="legend"><b>Digital twin:</b> vendor → material → PO → shipment → ROJ</div></div>
+<script>try{{const root=document.getElementById('scene');let W=root.clientWidth||1400,H=474;const scene=new THREE.Scene();const camera=new THREE.PerspectiveCamera(43,W/H,.1,100);camera.position.set(0,.25,10.8);const renderer=new THREE.WebGLRenderer({{alpha:true,antialias:true,powerPreference:'high-performance'}});renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.7));renderer.setSize(W,H);root.appendChild(renderer.domElement);const world=new THREE.Group();world.position.set(W<800?2.6:3.15,.15,0);scene.add(world);const cyan=0x4cc9ff,violet=0x8075ff,amber=0xffb44a,green=0x34d399,red=0xff6b6b;function basic(c,o=.65,wire=false){{return new THREE.MeshBasicMaterial({{color:c,transparent:true,opacity:o,wireframe:wire}})}}const shell=new THREE.Mesh(new THREE.IcosahedronGeometry(1.32,2),basic(cyan,.24,true));world.add(shell);const inner=new THREE.Mesh(new THREE.IcosahedronGeometry(.82,1),basic(violet,.12,true));world.add(inner);const core=new THREE.Mesh(new THREE.SphereGeometry(.18,22,22),basic(amber,.95,false));world.add(core);const rings=[];[[1.85,1.10,.25,cyan,.22],[2.25,.42,.78,violet,.17],[2.72,1.42,.35,amber,.13],[3.15,.80,1.25,cyan,.08]].forEach((r,i)=>{{const m=new THREE.Mesh(new THREE.TorusGeometry(r[0],.009,6,160),basic(r[3],r[4],false));m.rotation.x=r[1];m.rotation.y=r[2];m.rotation.z=i*.26;world.add(m);rings.push(m)}});const nodes=[],positions=[],nodeColors=[cyan,cyan,cyan,violet,amber,green,red];for(let i=0;i<44;i++){{const a=(i/44)*Math.PI*2+(Math.random()-.5)*.25;const band=i%2;const rr=band?2.1+Math.random()*1.3:1.55+Math.random()*.8;const y=(Math.random()-.5)*(band?3.2:2.1);const v=new THREE.Vector3(Math.cos(a)*rr,y,Math.sin(a)*rr*.68);positions.push(v);const size=i%9===0?.075:.035;const n=new THREE.Mesh(new THREE.SphereGeometry(size,10,10),basic(nodeColors[i%nodeColors.length],i%9===0?.95:.65,false));n.position.copy(v);world.add(n);nodes.push(n)}}const linePts=[];for(let i=0;i<positions.length;i++){{let nearest=[];for(let j=0;j<positions.length;j++)if(i!==j)nearest.push([positions[i].distanceTo(positions[j]),j]);nearest.sort((a,b)=>a[0]-b[0]);for(const pair of nearest.slice(0,2))linePts.push(positions[i],positions[pair[1]])}}const geo=new THREE.BufferGeometry().setFromPoints(linePts);world.add(new THREE.LineSegments(geo,new THREE.LineBasicMaterial({{color:0x4d7898,transparent:true,opacity:.13}})));const spokePts=[];positions.filter((_,i)=>i%3===0).forEach(v=>spokePts.push(new THREE.Vector3(0,0,0),v));world.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(spokePts),new THREE.LineBasicMaterial({{color:cyan,transparent:true,opacity:.10}})));const grid=new THREE.GridHelper(11,28,0x1e5f83,0x173249);grid.material.transparent=true;grid.material.opacity=.10;grid.position.y=-2.75;world.add(grid);const pCount=180,pa=new Float32Array(pCount*3);for(let i=0;i<pCount;i++){{pa[i*3]=(Math.random()-.5)*14;pa[i*3+1]=(Math.random()-.5)*8;pa[i*3+2]=(Math.random()-.5)*8-1}}const pg=new THREE.BufferGeometry();pg.setAttribute('position',new THREE.BufferAttribute(pa,3));const particles=new THREE.Points(pg,new THREE.PointsMaterial({{color:0x5abde8,size:.022,transparent:true,opacity:.28}}));scene.add(particles);const movers=[];function addSignal(a,b,c,color,offset){{const curve=new THREE.QuadraticBezierCurve3(a,b,c);world.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(70)),new THREE.LineBasicMaterial({{color,transparent:true,opacity:.12}})));const dot=new THREE.Mesh(new THREE.SphereGeometry(.055,12,12),basic(color,.95,false));world.add(dot);movers.push({{curve,dot,offset}})}}addSignal(new THREE.Vector3(-3,1.2,-.3),new THREE.Vector3(-.9,2.2,.7),new THREE.Vector3(0,0,0),cyan,0);addSignal(new THREE.Vector3(3,-1.5,.2),new THREE.Vector3(1.2,-2,1),new THREE.Vector3(0,0,0),amber,.34);addSignal(new THREE.Vector3(2.6,1.9,-.4),new THREE.Vector3(.8,2.4,-1.2),new THREE.Vector3(0,0,0),violet,.67);let mx=0,my=0;window.addEventListener('pointermove',e=>{{mx=e.clientX/window.innerWidth-.5;my=e.clientY/window.innerHeight-.5}});const clock=new THREE.Clock();function frame(){{requestAnimationFrame(frame);const t=clock.getElapsedTime();shell.rotation.x=t*.075;shell.rotation.y=t*.11;inner.rotation.x=-t*.10;inner.rotation.z=t*.08;rings.forEach((r,i)=>r.rotation.z+=.00055*(i%2?1:-1));nodes.forEach((n,i)=>{{const s=1+Math.sin(t*1.45+i*.75)*.13;n.scale.setScalar(s)}});movers.forEach(m=>m.dot.position.copy(m.curve.getPoint((t*.095+m.offset)%1)));particles.rotation.y=t*.008;world.rotation.y+=(mx*.08-world.rotation.y)*.018;world.rotation.x+=(-my*.035-world.rotation.x)*.018;renderer.render(scene,camera)}}frame();window.addEventListener('resize',()=>{{W=root.clientWidth||1400;H=window.innerWidth<800?430:474;camera.aspect=W/H;camera.updateProjectionMatrix();renderer.setSize(W,H)}})}}catch(e){{console.warn('3D dashboard fallback',e)}}</script></body></html>"""
+    components.html(html, height=486, scrolling=False)
+
+
+def render_dashboard_summary(scores, high, med, low, critical, late, ctx=None):
+    total = max(len(scores), 1)
+    severe = sum((s.get("predicted_delay_days") or 0) >= 7 for s in scores)
+    top5 = sorted(scores, key=lambda x: float(x.get("miss_roj_probability") or 0), reverse=True)[:5]
+    top_html = '<div class="rg-priority-list">'
+    for s in top5:
+        p = float(s.get("miss_roj_probability") or 0) * 100
+        top_html += f'<div class="rg-priority-row"><div><div class="rg-priority-name">{clean_name(s.get("material_name"))}</div><div class="rg-priority-meta">{s.get("vendor_name") or "—"} · {s.get("po_number") or "—"} · delay {s.get("predicted_delay_days") or 0}d</div><div class="rg-risk-mini"><span style="width:{min(max(p,2),100):.0f}%"></span></div></div><div class="rg-priority-score">{p:.0f}%</div></div>'
+    top_html += '</div>'
+    events = (ctx or {}).get("activity", [])[:4]
+    if events:
+        event_html = '<div class="rg-activity-compact">'
+        for e in events:
+            event_html += f'<div class="rg-activity-row"><span class="rg-activity-dot"></span><div><div class="rg-activity-title">{e.get("title") or e.get("type") or "Project update"}</div><div class="rg-activity-detail">{e.get("date") or "—"} · {e.get("detail") or ""}</div></div></div>'
+        event_html += '</div>'
+    else:
+        event_html = '<div class="rg-note">No recent material events are available yet.</div>'
+    risk_pct=(high+med)/total*100; late_pct=late/total*100; crit_pct=critical/total*100; severe_pct=severe/total*100
+    html = f'''<div class="rg-dashboard-grid">
+      <div class="rg-dashboard-panel"><div class="rg-dash-panel-title">Portfolio risk</div><div class="rg-dash-panel-sub">Current distribution across active procurement lines</div><div class="rg-donut-wrap" style="grid-template-columns:128px 1fr;gap:18px"><div class="rg-donut" style="width:124px;height:124px;background:conic-gradient(#ef4444 0 {high/total*100:.1f}%,#f59e0b {high/total*100:.1f}% {(high+med)/total*100:.1f}%,#22c55e {(high+med)/total*100:.1f}% 100%)"><div class="rg-donut-center"><div><b>{total}</b><span>active</span></div></div></div><div><div class="rg-legend-row"><div class="rg-legend-label"><span class="rg-dot" style="background:#ef4444"></span>High</div><div class="rg-legend-value">{high}</div></div><div class="rg-legend-row"><div class="rg-legend-label"><span class="rg-dot" style="background:#f59e0b"></span>Medium</div><div class="rg-legend-value">{med}</div></div><div class="rg-legend-row"><div class="rg-legend-label"><span class="rg-dot" style="background:#22c55e"></span>Low</div><div class="rg-legend-value">{low}</div></div></div></div></div>
+      <div class="rg-dashboard-panel"><div class="rg-dash-panel-title">Schedule exposure</div><div class="rg-dash-panel-sub">Where procurement pressure is touching milestones</div><div class="rg-exposure-row"><div class="rg-exposure-name">High + medium risk<small>Lines requiring monitoring or intervention</small><div class="rg-meter"><span style="width:{risk_pct:.0f}%"></span></div></div><div class="rg-exposure-value">{high+med}</div></div><div class="rg-exposure-row"><div class="rg-exposure-name">Forecast beyond ROJ<small>Predicted arrival later than site requirement</small><div class="rg-meter"><span style="width:{late_pct:.0f}%"></span></div></div><div class="rg-exposure-value">{late}</div></div><div class="rg-exposure-row"><div class="rg-exposure-name">Critical-path exposure<small>At-risk critical activities</small><div class="rg-meter"><span style="width:{crit_pct:.0f}%"></span></div></div><div class="rg-exposure-value">{critical}</div></div><div class="rg-exposure-row"><div class="rg-exposure-name">Severe slippage<small>Forecast delay of seven days or more</small><div class="rg-meter"><span style="width:{severe_pct:.0f}%"></span></div></div><div class="rg-exposure-value">{severe}</div></div></div>
+      <div class="rg-dashboard-panel"><div class="rg-dash-panel-title">Priority materials</div><div class="rg-dash-panel-sub">Highest miss-ROJ probability right now</div>{top_html}</div></div>'''
+    st.markdown(html, unsafe_allow_html=True)
+    st.markdown(f'<div class="rg-dashboard-grid" style="grid-template-columns:1.35fr .65fr;margin-top:0"><div class="rg-dashboard-panel" style="min-height:180px"><div class="rg-dash-panel-title">Recent project signals</div><div class="rg-dash-panel-sub">Latest linked material and supplier events</div>{event_html}</div><div class="rg-dashboard-panel" style="min-height:180px"><div class="rg-dash-panel-title">Control state</div><div class="rg-dash-panel-sub">Decision support remains human governed</div><div class="rg-compact-stat-row" style="grid-template-columns:1fr 1fr"><div class="rg-compact-stat"><span>Forecast late</span><b>{late}</b></div><div class="rg-compact-stat"><span>Severe slips</span><b>{severe}</b></div><div class="rg-compact-stat"><span>At risk</span><b>{high+med}</b></div><div class="rg-compact-stat"><span>Approval</span><b>Human</b></div></div></div></div>',unsafe_allow_html=True)
+
 def render_top_shell(health_ok):
     status = '<span class="rg-status"><span class="rg-status-dot"></span>System live</span>' if health_ok else '<span class="rg-status" style="border-color:rgba(239,68,68,.28);background:rgba(239,68,68,.08);color:#fecaca"><span class="rg-status-dot" style="background:#ef4444"></span>Backend unavailable</span>'
     st.markdown(f'<div class="rg-topbar"><div class="rg-brand"><div class="rg-logo">R</div><div><div class="rg-brand-title">ROJ Guard</div><div class="rg-brand-sub">Predictive procurement intelligence • live construction control tower</div></div></div><div class="rg-status-wrap"><span class="rg-control-pill">Bangalore Hyperscale DC • Phase 1</span><span class="rg-control-pill">AI + ML online</span>{status}<span class="rg-trust">Human-governed execution</span></div></div>', unsafe_allow_html=True)
@@ -471,10 +537,8 @@ def render_top_shell(health_ok):
 # ---------------------------------------------------------------------------
 health = api_get("/", quiet=True)
 render_top_shell(bool(health))
-PAGES = ["Overview", "Incoming Intelligence", "Material Intelligence", "Project Graph", "Live Demo", "Approval Center"]
+PAGES = ["Dashboard", "Incoming Intelligence", "Real Data Lab", "Material Intelligence", "Project Graph", "Live Demo", "Approval Center"]
 page = st.radio("Workspace", PAGES, horizontal=True, label_visibility="collapsed", key="top_workspace")
-st.markdown(f'<div class="rg-control-strip"><span class="rg-control-pill">API: {BACKEND_URL}</span><span class="rg-control-pill">Human approval required before outbound execution</span><span class="rg-control-pill">XGBoost + Gemini + Project Graph</span></div>',unsafe_allow_html=True)
-render_signal_rail()
 with st.expander("System controls", expanded=False):
     cc1, cc2, cc3 = st.columns([1,1,2])
     with cc1:
@@ -493,114 +557,51 @@ with st.expander("System controls", expanded=False):
         st.caption("Controls are intentionally secondary. The main navigation is optimized for evaluator workflows on desktop and mobile.")
 
 # ---------------------------------------------------------------------------
-# OVERVIEW
+# DASHBOARD
 # ---------------------------------------------------------------------------
-if page == "Overview":
-    header("Portfolio command center", "Project risk overview", "A predictive view of active procurement lines, schedule exposure, and the interventions that need attention now.")
+if page == "Dashboard":
     scores = api_get("/api/risk/scores") or []
     if not scores:
-        st.info("No active risk scores are available. Recompute risk from the sidebar.")
+        header("Live project intelligence", "Dashboard", "No active risk scores are available yet. Use System controls to compute current material risk.")
+        st.info("No active risk scores are available. Recompute active risk from System controls above.")
     else:
         high = sum(s.get("risk_level") == "High" for s in scores)
         med = sum(s.get("risk_level") == "Medium" for s in scores)
         low = sum(s.get("risk_level") == "Low" for s in scores)
         critical = sum(bool(s.get("is_critical_path")) and s.get("risk_level") in ("High", "Medium") for s in scores)
         late = sum((s.get("predicted_delay_days") or 0) > 0 for s in scores)
-
-        render_3d_hero(
-            "See procurement risk before it reaches the site.",
-            "ROJ Guard links supplier signals, shipment context and schedule constraints into a live predictive view — then prepares mitigation while keeping every outbound action under human control.",
-            [("Active lines", len(scores)), ("High risk", high), ("Critical path", critical), ("Forecast late", late)],
-            mode="overview",
-        )
-        render_intelligence_pipeline("Predict")
-        render_glass_banner(
-            "One operating picture for procurement risk.",
-            "Live material context, vendor signals, shipment state and schedule exposure are connected before risk is scored — so the team sees not only what is late, but what is likely to become late next.",
-            ["Real-time signals", "Explainable risk", "Human-governed actions"],
-            eyebrow="Command center online",
-        )
-
-        cols = st.columns(5)
-        cards = [
-            ("Active materials", len(scores), "Current procurement portfolio"),
-            ("High risk", high, "Immediate mitigation candidates"),
-            ("Medium risk", med, "Emerging schedule friction"),
-            ("Critical-path exposure", critical, "High/medium on critical path"),
-            ("Forecast late", late, "Arrival forecast beyond ROJ"),
-        ]
-        for col, card in zip(cols, cards):
-            col.markdown(kpi_card(*card), unsafe_allow_html=True)
-
-        # Fast visual read: distribution + aggregate drivers before the detailed table.
-        panel_left, panel_right = st.columns([.9, 1.1])
-        total = max(len(scores), 1)
-        high_pct, med_pct, low_pct = high / total * 100, med / total * 100, low / total * 100
-        with panel_left:
-            render_risk_donut(high, med, low)
-        with panel_right:
-            severe = sum((s.get("predicted_delay_days") or 0) >= 7 for s in scores)
-            at_risk = [s for s in scores if s.get("risk_level") in ("High", "Medium")]
-            vendor_counts = Counter((s.get("vendor_name") or "Unknown vendor") for s in at_risk)
-            top_vendor, top_vendor_count = vendor_counts.most_common(1)[0] if vendor_counts else ("—", 0)
-            st.markdown(
-                f"""<div class="rg-card"><div class="rg-panel-title">Top risk drivers</div><div class="rg-panel-sub">What is creating schedule exposure right now</div><div class="rg-driver-grid">
-                <div class="rg-driver-item"><div><b>Forecast arrival beyond ROJ</b><span>Active lines whose forecast crosses the required-on-job date</span></div><div class="rg-driver-num">{late}</div></div>
-                <div class="rg-driver-item"><div><b>Critical-path exposure</b><span>High/medium-risk materials tied to critical activities</span></div><div class="rg-driver-num">{critical}</div></div>
-                <div class="rg-driver-item"><div><b>Severe schedule slippage</b><span>Forecast delay of seven days or more</span></div><div class="rg-driver-num">{severe}</div></div>
-                <div class="rg-driver-item"><div><b>Supplier concentration</b><span>{top_vendor} has the most high/medium-risk lines</span></div><div class="rg-driver-num">{top_vendor_count}</div></div>
-                </div></div>""",
-                unsafe_allow_html=True,
-            )
-
+        st.markdown('<div class="rg-dashboard-label"><div class="rg-dashboard-title">Dashboard</div><div class="rg-dashboard-meta">Live material risk · schedule exposure · intervention priority</div></div>', unsafe_allow_html=True)
+        render_dashboard_hero([("Active lines",len(scores)),("High risk",high),("Critical path",critical),("Forecast late",late)])
+        top = sorted(scores, key=lambda x: float(x.get("miss_roj_probability") or 0), reverse=True)[0]
+        ctx = api_get(f"/api/experience/material/{top['material_id']}", quiet=True)
+        render_dashboard_summary(scores, high, med, low, critical, late, ctx)
         st.markdown('<div class="rg-section">Materials requiring attention</div>', unsafe_allow_html=True)
-        df = pd.DataFrame(scores)
-        display = df[["material_name", "sku", "po_number", "vendor_name", "risk_level", "miss_roj_probability", "predicted_arrival_date", "roj_date", "predicted_delay_days", "is_critical_path"]].copy()
+        df = pd.DataFrame(sorted(scores, key=lambda x: float(x.get("miss_roj_probability") or 0), reverse=True))
+        display = df[["material_name","sku","po_number","vendor_name","risk_level","miss_roj_probability","predicted_arrival_date","roj_date","predicted_delay_days","is_critical_path"]].copy()
         display["material_name"] = display["material_name"].map(clean_name)
         display["sku"] = display["sku"].map(clean_sku)
         display["po_sku"] = display.apply(lambda row: f'{row.get("po_number") or "—"}  ·  {row.get("sku") or "—"}', axis=1)
-        display["miss_roj_probability"] = (display["miss_roj_probability"] * 100).round(0).astype(int).astype(str) + "%"
-        display = display[["material_name", "po_sku", "vendor_name", "risk_level", "miss_roj_probability", "predicted_arrival_date", "roj_date", "predicted_delay_days", "is_critical_path"]]
-        display.columns = ["Material", "PO / SKU", "Vendor", "Risk", "Miss ROJ", "Forecast arrival", "ROJ", "Delay (days)", "Critical path"]
-        st.dataframe(
-            display,
-            use_container_width=True,
-            hide_index=True,
-            height=360,
-            column_config={
-                "Material": st.column_config.TextColumn(width="medium"),
-                "PO / SKU": st.column_config.TextColumn(width="medium", help="Purchase-order number and unique material SKU"),
-                "Vendor": st.column_config.TextColumn(width="medium"),
-                "Risk": st.column_config.TextColumn(width="small"),
-                "Miss ROJ": st.column_config.TextColumn(width="small"),
-                "Critical path": st.column_config.CheckboxColumn(width="small"),
-            },
-        )
-
-        c1, c2 = st.columns([1.2, .8])
-        with c1:
-            st.markdown('<div class="rg-section">Highest-risk material</div>', unsafe_allow_html=True)
-            top = scores[0]
-            ctx = api_get(f"/api/experience/material/{top['material_id']}")
-            if ctx:
-                risk = ctx["risk"]
-                st.markdown(
-                    f'<div class="rg-card"><div style="display:flex;justify-content:space-between;gap:12px"><div><div style="font-size:1.05rem;font-weight:800;color:white">{ctx["material"]["name"]}</div><div class="rg-note">{(ctx.get("vendor") or {}).get("name","—")} • {(ctx.get("po") or {}).get("po_number","—")}</div></div>{risk_chip(risk.get("risk_level"))}</div><div style="font-size:2rem;font-weight:850;margin-top:15px">{float(risk.get("miss_roj_probability") or 0)*100:.0f}%</div><div class="rg-note">Predicted miss-ROJ probability • forecast delay {risk.get("predicted_delay_days")} day(s)</div></div>',
-                    unsafe_allow_html=True,
-                )
+        display["miss_roj_probability"] = (display["miss_roj_probability"]*100).round(0).astype(int).astype(str)+"%"
+        display = display[["material_name","po_sku","vendor_name","risk_level","miss_roj_probability","predicted_arrival_date","roj_date","predicted_delay_days","is_critical_path"]]
+        display.columns = ["Material","PO / SKU","Vendor","Risk","Miss ROJ","Forecast arrival","ROJ","Delay (days)","Critical path"]
+        st.dataframe(display,use_container_width=True,hide_index=True,height=390,column_config={"Material":st.column_config.TextColumn(width="medium"),"PO / SKU":st.column_config.TextColumn(width="medium",help="Purchase-order number and unique material SKU"),"Vendor":st.column_config.TextColumn(width="medium"),"Risk":st.column_config.TextColumn(width="small"),"Miss ROJ":st.column_config.TextColumn(width="small"),"Critical path":st.column_config.CheckboxColumn(width="small")})
+        if ctx:
+            c1,c2=st.columns([1.15,.85])
+            with c1:
+                st.markdown('<div class="rg-section">Highest-risk material</div>',unsafe_allow_html=True)
+                risk=ctx["risk"]
+                st.markdown(f'<div class="rg-card"><div style="display:flex;justify-content:space-between;gap:12px"><div><div style="font-size:.96rem;font-weight:780;color:white">{clean_name(ctx["material"]["name"])}</div><div class="rg-note">{(ctx.get("vendor") or {}).get("name","—")} · {(ctx.get("po") or {}).get("po_number","—")}</div></div>{risk_chip(risk.get("risk_level"))}</div><div style="font-size:1.72rem;font-weight:840;margin-top:12px">{float(risk.get("miss_roj_probability") or 0)*100:.0f}%</div><div class="rg-note">Predicted miss-ROJ probability · forecast delay {risk.get("predicted_delay_days")} day(s)</div></div>',unsafe_allow_html=True)
                 render_drivers(ctx.get("risk_drivers"))
-        with c2:
-            st.markdown('<div class="rg-section">Recent activity</div>', unsafe_allow_html=True)
-            if ctx:
-                render_timeline(ctx.get("activity", [])[:5])
+            with c2:
+                st.markdown('<div class="rg-section">Latest activity</div>',unsafe_allow_html=True)
+                render_timeline(ctx.get("activity",[])[:5])
 
 # ---------------------------------------------------------------------------
 # INCOMING INTELLIGENCE
 # ---------------------------------------------------------------------------
 elif page == "Incoming Intelligence":
-    header("Layer 1 • Document intelligence", "Incoming intelligence", "Analyze a vendor email or project document, review the extracted entities, then apply the signal to the project. No Swagger or JSON API work is required.")
+    header("AI document intelligence", "Incoming intelligence", "Analyze a vendor email or project document, review the extracted entities, then apply the signal to the project. No Swagger or JSON API work is required.")
     render_3d_hero("Unstructured supplier updates become structured project signals.", "Documents, emails and logistics messages flow into one entity-linked intelligence layer before any signal is allowed to affect project risk.", [("Input", "Email / PDF"), ("Extraction", "Gemini"), ("Review", "Human"), ("Graph", "Controlled")], mode="ingest", compact=True)
-    render_intelligence_pipeline("Ingest")
     render_glass_banner(
         "Turn an unstructured supplier update into project intelligence.",
         "Paste a vendor message or upload a PDF. ROJ Guard extracts the entities and schedule signal first, then asks a human to confirm the result before anything touches the project graph.",
@@ -701,12 +702,254 @@ elif page == "Incoming Intelligence":
                     st.markdown(f'<div class="rg-card"><div class="rg-eyebrow">Agentic response prepared</div><div style="font-weight:800;color:white;margin:6px 0">Vendor escalation is waiting for human approval</div><div class="rg-note">{draft.get("reasoning","")}</div></div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
+# REAL DATA LAB
+# ---------------------------------------------------------------------------
+elif page == "Real Data Lab":
+    header(
+        "Bring your own procurement data",
+        "Real Data Lab",
+        "Upload a CSV/XLSX export, map the schema, validate data quality, optionally retrain an isolated model on completed delivery history, then score the active project without touching the deterministic demo dataset.",
+    )
+    render_3d_hero(
+        "Bring real procurement history into the risk engine.",
+        "ROJ Guard maps unfamiliar enterprise schemas into a canonical procurement contract, separates completed history from active materials, and makes model provenance explicit before any prediction is shown.",
+        [("Input", "CSV / XLSX"), ("Mapping", "Automatic"), ("Training", "Isolated"), ("Output", "ROJ risk")],
+        mode="ingest", compact=True,
+    )
+    render_glass_banner(
+        "Real data stays isolated from the hackathon demo baseline.",
+        "The lab never overwrites roj_guard.db or the baseline XGBoost artifacts. Choose Prototype Model mode for immediate inference, or retrain an in-session model when enough completed delivery outcomes are present.",
+        ["Schema mapping", "Quality gates", "Temporal holdout", "Downloadable predictions"],
+        eyebrow="BYOD • safe evaluation workspace",
+    )
+
+    intro_a, intro_b = st.columns([0.76, 0.24])
+    with intro_a:
+        uploaded_real = st.file_uploader(
+            "Upload procurement export",
+            type=["csv", "xlsx", "xlsm"],
+            key="real_data_upload",
+            help="One row per material / PO line is ideal. Historical completed and current active lines may be in the same file.",
+        )
+    with intro_b:
+        st.download_button(
+            "Download input template",
+            data=template_csv_bytes(),
+            file_name="roj_guard_real_data_template.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+        st.caption("Template fields are recommendations, not a strict naming requirement.")
+
+    if uploaded_real is None:
+        st.markdown('<div class="rg-section">What the lab expects</div>', unsafe_allow_html=True)
+        need1, need2, need3 = st.columns(3)
+        with need1:
+            st.markdown('<div class="rg-card"><div class="rg-eyebrow">Minimum to score</div><div style="font-weight:800;color:white;margin:7px 0">Material + vendor + ROJ</div><div class="rg-note">Current rows can be scored immediately. PO dates, ETA, critical path and live delay signals materially improve the result.</div></div>', unsafe_allow_html=True)
+        with need2:
+            st.markdown('<div class="rg-card"><div class="rg-eyebrow">Needed to retrain</div><div style="font-weight:800;color:white;margin:7px 0">Completed deliveries</div><div class="rg-note">Shipped date + actual delivered date + ROJ date create lead-time and missed-ROJ outcomes. At least 50 usable historical rows are required.</div></div>', unsafe_allow_html=True)
+        with need3:
+            st.markdown('<div class="rg-card"><div class="rg-eyebrow">Best-practice history</div><div style="font-weight:800;color:white;margin:7px 0">Snapshot / status date</div><div class="rg-note">A true historical status date makes validation more leakage-safe. Without it, the lab derives a conservative pre-delivery snapshot.</div></div>', unsafe_allow_html=True)
+    else:
+        file_bytes = uploaded_real.getvalue()
+        signature = hashlib.sha1(file_bytes).hexdigest()
+        previous_sig = st.session_state.get("real_data_signature")
+        if signature != previous_sig:
+            # Reset derived state when the evaluator uploads a different dataset.
+            for key in [
+                "real_mapping", "real_normalized", "real_validation", "real_training_df", "real_active_df",
+                "real_model_bundle", "real_model_metrics", "real_predictions", "real_train_status",
+            ]:
+                st.session_state.pop(key, None)
+            st.session_state["real_data_signature"] = signature
+
+        sheet_name = None
+        if uploaded_real.name.lower().endswith((".xlsx", ".xlsm")):
+            try:
+                sheets = excel_sheet_names(file_bytes)
+                sheet_name = st.selectbox("Workbook sheet", sheets, key="real_sheet")
+            except Exception as exc:
+                st.error(f"Could not inspect workbook sheets: {exc}")
+                sheets = []
+
+        try:
+            raw_real = read_tabular_bytes(file_bytes, uploaded_real.name, sheet_name=sheet_name)
+        except Exception as exc:
+            st.error(f"Could not read the uploaded dataset: {exc}")
+            raw_real = pd.DataFrame()
+
+        if not raw_real.empty:
+            suggestions, map_conf = suggest_column_mapping(raw_real.columns)
+            if "real_mapping" not in st.session_state:
+                st.session_state["real_mapping"] = suggestions.copy()
+
+            st.markdown('<div class="rg-section">1 • File intelligence</div>', unsafe_allow_html=True)
+            fa, fb, fc, fd = st.columns(4)
+            fa.markdown(kpi_card("Rows detected", f"{len(raw_real):,}", uploaded_real.name), unsafe_allow_html=True)
+            fb.markdown(kpi_card("Columns detected", len(raw_real.columns), "Raw enterprise schema"), unsafe_allow_html=True)
+            mapped_count = sum(bool(v) for v in suggestions.values())
+            fc.markdown(kpi_card("Auto-mapped", mapped_count, f"of {len(CANONICAL_FIELDS)} canonical fields"), unsafe_allow_html=True)
+            fd.markdown(kpi_card("Input mode", "Real data", "Isolated workspace"), unsafe_allow_html=True)
+
+            with st.expander("Preview uploaded rows", expanded=False):
+                st.dataframe(raw_real.head(25), use_container_width=True, hide_index=True)
+
+            st.markdown('<div class="rg-section">2 • Automatic schema mapping</div>', unsafe_allow_html=True)
+            mapping_preview = []
+            for field, meta in CANONICAL_FIELDS.items():
+                src = suggestions.get(field)
+                mapping_preview.append({
+                    "ROJ Guard field": meta["label"],
+                    "Suggested source": src or "—",
+                    "Confidence": f"{map_conf.get(field, 0)*100:.0f}%" if src else "—",
+                    "Required": "Yes" if meta["required"] else "No",
+                })
+            st.dataframe(pd.DataFrame(mapping_preview), use_container_width=True, hide_index=True, height=270)
+            st.caption("ROJ Guard uses exact synonyms first and fuzzy header matching second. Review the mapping before validation; real company column names do not need to match this prototype.")
+
+            choices = ["— Not mapped —"] + list(raw_real.columns)
+            mapping_now = {}
+            groups = []
+            for meta in CANONICAL_FIELDS.values():
+                if meta["group"] not in groups:
+                    groups.append(meta["group"])
+
+            with st.expander("Review / correct column mapping", expanded=True):
+                for group in groups:
+                    st.markdown(f"**{group}**")
+                    fields = [f for f, meta in CANONICAL_FIELDS.items() if meta["group"] == group]
+                    grid = st.columns(3)
+                    for i, field in enumerate(fields):
+                        suggested = st.session_state["real_mapping"].get(field)
+                        current = suggested if suggested in raw_real.columns else "— Not mapped —"
+                        idx = choices.index(current) if current in choices else 0
+                        label = CANONICAL_FIELDS[field]["label"] + (" *" if CANONICAL_FIELDS[field]["required"] else "")
+                        with grid[i % 3]:
+                            selected_col = st.selectbox(label, choices, index=idx, key=f"map_{signature[:8]}_{field}")
+                            mapping_now[field] = None if selected_col == "— Not mapped —" else selected_col
+                    st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
+
+            validate_col, isolation_col = st.columns([.28, .72])
+            with validate_col:
+                validate_click = st.button("Validate & Build Dataset", type="primary", use_container_width=True)
+            with isolation_col:
+                st.markdown('<div class="rg-note" style="padding-top:9px">Validation creates an in-memory canonical dataset only. It does <b>not</b> modify the main ROJ Guard project database.</div>', unsafe_allow_html=True)
+
+            if validate_click:
+                try:
+                    normalized = normalize_dataset(raw_real, mapping_now)
+                    report = validate_dataset(normalized)
+                    train_df, active_df = build_real_feature_frames(normalized)
+                    st.session_state["real_mapping"] = mapping_now
+                    st.session_state["real_normalized"] = normalized
+                    st.session_state["real_validation"] = report.as_dict()
+                    st.session_state["real_training_df"] = train_df
+                    st.session_state["real_active_df"] = active_df
+                    st.session_state.pop("real_model_bundle", None)
+                    st.session_state.pop("real_model_metrics", None)
+                    st.session_state.pop("real_predictions", None)
+                except Exception as exc:
+                    st.error(f"Validation failed: {exc}")
+
+            report = st.session_state.get("real_validation")
+            train_df = st.session_state.get("real_training_df")
+            active_df = st.session_state.get("real_active_df")
+            if report:
+                st.markdown('<div class="rg-section">3 • Data quality gate</div>', unsafe_allow_html=True)
+                qa, qb, qc, qd, qe = st.columns(5)
+                qa.markdown(kpi_card("Quality score", f'{report["quality_score"]}%', "Key-field completeness"), unsafe_allow_html=True)
+                qb.markdown(kpi_card("Completed history", f'{report["historical_rows"]:,}', "Potential training outcomes"), unsafe_allow_html=True)
+                qc.markdown(kpi_card("Active rows", f'{report["active_rows"]:,}', "Materials to score"), unsafe_allow_html=True)
+                qd.markdown(kpi_card("Vendors", report["vendors"], "Unique suppliers"), unsafe_allow_html=True)
+                qe.markdown(kpi_card("Missed ROJ history", report["missed_roj_rows"], f'vs {report["on_time_rows"]} on-time'), unsafe_allow_html=True)
+
+                for err in report.get("errors", []):
+                    st.error(err)
+                for warn in report.get("warnings", []):
+                    st.warning(warn)
+
+                if not report.get("errors"):
+                    st.markdown('<div class="rg-section">4 • Choose model provenance</div>', unsafe_allow_html=True)
+                    mode = st.radio(
+                        "Inference mode",
+                        ["Prototype model + real project data", "Retrain on supplied historical data"],
+                        horizontal=True,
+                        key="real_inference_mode",
+                    )
+
+                    if mode == "Prototype model + real project data":
+                        st.markdown('<div class="rg-card"><div class="rg-eyebrow">Immediate inference</div><div style="font-size:1rem;color:white;font-weight:800;margin:6px 0">Use the existing hackathon model, but calculate live features from this uploaded dataset.</div><div class="rg-note">This demonstrates integration on real project data. It does not claim production accuracy because the statistical model was trained on the prototype history.</div></div>', unsafe_allow_html=True)
+                    else:
+                        st.markdown('<div class="rg-card"><div class="rg-eyebrow">Isolated real-history retraining</div><div style="font-size:1rem;color:white;font-weight:800;margin:6px 0">Train a new XGBoost lead-time regressor + miss-ROJ classifier in this browser session.</div><div class="rg-note">The lab uses a temporal 80/20 holdout and never overwrites the baseline joblib models. Historical rows need shipped date, actual delivery date and ROJ outcome.</div></div>', unsafe_allow_html=True)
+                        train_click = st.button("Train Real-Data Model", type="primary", disabled=(train_df is None or len(train_df) < 50), use_container_width=True)
+                        if train_click:
+                            with st.spinner("Building leakage-reduced historical features → temporal holdout → training XGBoost models..."):
+                                trained = train_real_data_models(train_df)
+                            st.session_state["real_train_status"] = trained.get("status")
+                            if trained.get("status") == "trained":
+                                st.session_state["real_model_bundle"] = trained.pop("bundle")
+                                st.session_state["real_model_metrics"] = trained
+                                st.session_state.pop("real_predictions", None)
+                            else:
+                                st.session_state.pop("real_model_bundle", None)
+                                st.session_state["real_model_metrics"] = trained
+
+                        metrics = st.session_state.get("real_model_metrics")
+                        if metrics:
+                            if metrics.get("status") == "trained":
+                                ma, mb, mc, md, me = st.columns(5)
+                                ma.markdown(kpi_card("Rows used", metrics["rows_used"], metrics.get("model_grade", "real history")), unsafe_allow_html=True)
+                                mb.markdown(kpi_card("Holdout", metrics["holdout_rows"], "Temporal validation"), unsafe_allow_html=True)
+                                mc.markdown(kpi_card("Lead-time MAE", f'{metrics["lead_time_mae_days"]:.2f}d', "Lower is better"), unsafe_allow_html=True)
+                                auc_label = f'{metrics["risk_auc"]:.3f}' if metrics.get("risk_auc") is not None else "N/A"
+                                md.markdown(kpi_card("Risk AUC", auc_label, "Temporal holdout"), unsafe_allow_html=True)
+                                me.markdown(kpi_card("Recall", f'{metrics["recall"]*100:.0f}%', "Late-material detection"), unsafe_allow_html=True)
+                                st.caption(f'Precision {metrics["precision"]:.3f} • F1 {metrics["f1"]:.3f} • historical miss rate {metrics["historical_miss_rate"]*100:.1f}%. These metrics describe only the supplied holdout dataset.')
+                            else:
+                                st.warning(metrics.get("note", "Real-data retraining could not be completed."))
+
+                    st.markdown('<div class="rg-section">5 • Predict active materials</div>', unsafe_allow_html=True)
+                    can_score = active_df is not None and not active_df.empty
+                    if mode == "Retrain on supplied historical data":
+                        can_score = can_score and bool(st.session_state.get("real_model_bundle"))
+                    if st.button("Score Active Materials", type="primary", use_container_width=True, disabled=not can_score):
+                        with st.spinner("Building current operational features → forecasting lead time → computing miss-ROJ probability..."):
+                            if mode == "Retrain on supplied historical data":
+                                preds = score_with_real_model(active_df, st.session_state["real_model_bundle"])
+                            else:
+                                preds = score_with_prototype_model(active_df)
+                        st.session_state["real_predictions"] = preds
+
+                    predictions = st.session_state.get("real_predictions")
+                    if isinstance(predictions, pd.DataFrame) and not predictions.empty:
+                        counts = Counter(predictions["Risk"])
+                        st.markdown('<div class="rg-section">Real-data prediction output</div>', unsafe_allow_html=True)
+                        pa, pb, pc, pdx = st.columns(4)
+                        pa.markdown(kpi_card("Scored", len(predictions), "Active procurement lines"), unsafe_allow_html=True)
+                        pb.markdown(kpi_card("High risk", counts.get("High", 0), "Immediate attention"), unsafe_allow_html=True)
+                        pc.markdown(kpi_card("Medium risk", counts.get("Medium", 0), "Watch / mitigate"), unsafe_allow_html=True)
+                        pdx.markdown(kpi_card("Low risk", counts.get("Low", 0), "Currently protected"), unsafe_allow_html=True)
+
+                        display = predictions.copy()
+                        display["Risk %"] = (display["Miss ROJ probability"] * 100).round(1).astype(str) + "%"
+                        cols_show = ["Material", "PO", "Vendor", "Risk", "Risk %", "Forecast arrival", "ROJ date", "Forecast delay days", "Critical path", "Model source", "Why"]
+                        st.dataframe(display[cols_show], use_container_width=True, hide_index=True, height=430)
+
+                        st.download_button(
+                            "Download prediction results CSV",
+                            data=predictions.to_csv(index=False).encode("utf-8"),
+                            file_name="roj_guard_real_data_predictions.csv",
+                            mime="text/csv",
+                            use_container_width=True,
+                        )
+                        st.caption("Prediction rows retain the original source-row number for traceability. No uploaded data is written into the main hackathon demo database by this workflow.")
+
+# ---------------------------------------------------------------------------
 # MATERIAL INTELLIGENCE
 # ---------------------------------------------------------------------------
 elif page == "Material Intelligence":
     header("Layer 3 + 4 • Explainable risk", "Material intelligence", "Inspect the forecast, live risk drivers, vendor context, schedule exposure, and mitigation actions for a single material line.")
     render_3d_hero("One material. Every signal. One risk state.", "ROJ Guard fuses vendor history, shipment state, schedule constraints and live communications into a continuously explainable material risk profile.", [("Risk", "Live"), ("Forecast", "Dynamic"), ("Drivers", "Explainable"), ("Actions", "3 agents")], mode="material", compact=True)
-    render_intelligence_pipeline("Predict")
     items, labels = material_options()
     if not items:
         st.info("No active materials available.")
@@ -769,7 +1012,6 @@ elif page == "Material Intelligence":
 elif page == "Project Graph":
     render_3d_hero("A project graph built for decisions, not decoration.", "Trace every material from project and vendor context through purchase order, shipment and Required-On-Job constraints. Risk intelligence stays attached to the entities that created it.", [("Graph layer", "Live"), ("Entity linking", "Active"), ("Risk context", "Attached")], accent="#38bdf8", mode="graph")
     header("Layer 2 • Project graph", "Project graph", "A material-centric projection of the entities ROJ Guard links together. The same contract maps naturally onto Kaya/Amber's existing project graph.")
-    render_intelligence_pipeline("Link")
     render_glass_banner("Context travels with the material.", "Every forecast is anchored to the project entities that created it — material, vendor, PO, shipment and ROJ. That gives the risk engine traceable context and makes the output easier to audit.", ["Entity-linked", "Traceable", "Kaya / Amber compatible"], eyebrow="Graph intelligence")
     items, labels = material_options()
     if items:
@@ -800,7 +1042,6 @@ elif page == "Project Graph":
 elif page == "Live Demo":
     header("60-second judge scenario", "Live risk reaction demo", "One deterministic scenario demonstrates the entire Round-1 promise: a healthy material receives a vendor delay signal, risk changes immediately, and an agent prepares mitigation for human approval.")
     render_3d_hero("Watch a vendor signal travel through the project intelligence graph.", "A 14-day supplier delay propagates from communication to material context, forecast, ROJ risk and finally a human-governed mitigation action.", [("Before", "4% Low"), ("Signal", "+14 days"), ("After", "90% High"), ("Action", "Escalate")], mode="demo", compact=True)
-    render_intelligence_pipeline("Act")
     render_glass_banner("Watch one supplier signal propagate through the whole system.", "This scenario is deterministic by design: it starts with a healthy material, injects a 14-day vendor delay, recomputes ROJ risk and automatically prepares a mitigation draft for human approval.", ["4% → 90%", "14-day signal", "Agent draft", "Human approval"], eyebrow="Live scenario armed")
 
     top_a, top_b = st.columns([.72,.28])
@@ -876,7 +1117,6 @@ elif page == "Live Demo":
 elif page == "Approval Center":
     header("Layer 4 • Human-in-the-loop", "Approval center", "Review, edit, approve or reject AI-drafted mitigation actions. Execution receipts remain visible for auditability.")
     render_3d_hero("AI can prepare the move. People still authorize it.", "Every vendor escalation, resequencing proposal and alternate-supplier intervention crosses an explicit approval boundary before execution.", [("Drafts", "Editable"), ("Approval", "Required"), ("Execution", "Controlled"), ("Audit", "Retained")], mode="approval", compact=True)
-    render_intelligence_pipeline("Act")
     render_glass_banner("AI prepares. People decide.", "ROJ Guard can draft escalation, resequencing and alternate-supplier actions, but the execution boundary remains explicit: review, edit, approve or reject — with a retained audit record.", ["Human approval", "Editable drafts", "Execution receipts", "Audit trail"], eyebrow="Governance layer")
     pending = api_get("/api/actions/pending") or []
     materials, label_map = material_options()
