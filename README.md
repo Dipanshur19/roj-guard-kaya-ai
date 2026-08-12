@@ -162,6 +162,28 @@ Apply to Project
 
 Nothing enters the project intelligence layer until the user confirms it.
 
+### Real Data Lab
+Bring a company procurement export directly into ROJ Guard without modifying the deterministic demo baseline.
+
+The lab supports **CSV / XLSX / XLSM** and provides:
+- automatic schema mapping with human correction,
+- data-quality and outcome validation,
+- separation of completed history vs active procurement lines,
+- immediate scoring with the prototype model + real live data,
+- isolated XGBoost retraining when sufficient completed history is supplied,
+- temporal holdout metrics (MAE, AUC, precision, recall, F1),
+- downloadable active-material predictions with model provenance.
+
+Two provenance modes are deliberately explicit:
+
+```text
+Prototype model + real project data
+        OR
+Retrained on supplied historical data
+```
+
+The retraining workflow does **not** overwrite `roj_guard.db` or the baseline model files.
+
 ### Material Intelligence
 Drill into a single procurement line and inspect:
 - Miss-ROJ probability
@@ -308,6 +330,7 @@ roj-guard-kaya-ai/
 ├── execution_layer4.py            # Controlled execution
 │
 ├── api_experience.py              # Product/demo experience APIs
+├── real_data_lab.py                # CSV/XLSX mapping, validation, retraining & BYOD scoring
 ├── dashboard_layer3.py            # Streamlit product UI
 ├── seed_data_layer1.py            # Synthetic demo/training data
 │
@@ -391,7 +414,9 @@ Open: `http://localhost:8501`
       ↓
 2. Incoming Intelligence
       ↓
-3. Apply a vendor-delay signal
+3. Real Data Lab (optional BYOD proof)
+      ↓
+4. Apply a vendor-delay signal
       ↓
 4. Observe Before → Signal → After
       ↓

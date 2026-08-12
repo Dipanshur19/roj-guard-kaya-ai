@@ -14,3 +14,4 @@ streamlit==1.40.2
 requests==2.32.3
 python-dotenv==1.0.1
 pypdf==6.0.0
+openpyxl==3.1.5
