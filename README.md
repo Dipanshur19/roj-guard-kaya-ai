@@ -165,24 +165,20 @@ Nothing enters the project intelligence layer until the user confirms it.
 ### Real Data Lab
 Bring a company procurement export directly into ROJ Guard without modifying the deterministic demo baseline.
 
-The lab supports **CSV / XLSX / XLSM** and provides:
-- automatic schema mapping with human correction,
-- data-quality and outcome validation,
-- separation of completed history vs active procurement lines,
-- immediate scoring with the prototype model + real live data,
-- isolated XGBoost retraining when sufficient completed history is supplied,
-- temporal holdout metrics (MAE, AUC, precision, recall, F1),
-- downloadable active-material predictions with model provenance.
+The lab supports **CSV / XLSX / XLSM** with automatic schema mapping, human correction, data-quality validation and explicit model provenance. It now detects two distinct workflows rather than forcing every file into an ROJ schema.
 
-Two provenance modes are deliberately explicit:
+**Project ROJ Mode** — when the upload contains Required-On-Job dates, ROJ Guard can score active materials immediately and can retrain the full lead-time + miss-ROJ model when sufficient historical outcomes exist.
 
-```text
-Prototype model + real project data
-        OR
-Retrained on supplied historical data
-```
+**Historical Procurement Mode** — when an export has supplier/order/delivery history but no ROJ field, ROJ Guard does not fabricate an ROJ target. Instead it:
+- cleans legitimate `Delivered` order-to-delivery outcomes,
+- builds supplier completion, compliance, defect, savings and lead-time intelligence,
+- trains an isolated XGBoost order-to-delivery model with a temporal holdout,
+- compares model MAE against a naive historical baseline,
+- asks the evaluator for a new PO date + real project ROJ date,
+- converts the real lead-time forecast and forecast uncertainty into an explainable ROJ-risk scenario,
+- compares the same scenario across suppliers while explicitly retaining a human capability-qualification gate.
 
-The retraining workflow does **not** overwrite `roj_guard.db` or the baseline model files.
+The lab never overwrites `roj_guard.db` or the baseline model artifacts. Metrics shown for uploaded data are labeled as holdout/demo validation, not production claims.
 
 ### Material Intelligence
 Drill into a single procurement line and inspect:

@@ -39,13 +39,16 @@ from train_models_layer3 import LEAD_TIME_MODEL_PATH, RISK_CLASSIFIER_MODEL_PATH
 
 CANONICAL_FIELDS = {
     "project_name": {"label": "Project name", "required": False, "group": "Identity"},
-    "material_description": {"label": "Material description", "required": True, "group": "Identity"},
+    "material_description": {"label": "Material description", "required": False, "group": "Identity"},
     "material_class": {"label": "Material class", "required": False, "group": "Identity"},
     "sku": {"label": "SKU / material code", "required": False, "group": "Identity"},
-    "vendor_name": {"label": "Vendor / supplier", "required": True, "group": "Identity"},
+    "vendor_name": {"label": "Vendor / supplier", "required": False, "group": "Identity"},
     "po_number": {"label": "PO number", "required": False, "group": "PO & Commercial"},
     "quantity": {"label": "Quantity", "required": False, "group": "PO & Commercial"},
     "unit_price": {"label": "Unit price", "required": False, "group": "PO & Commercial"},
+    "negotiated_price": {"label": "Negotiated price", "required": False, "group": "PO & Commercial"},
+    "defective_units": {"label": "Defective units", "required": False, "group": "Supplier Quality"},
+    "compliance": {"label": "Compliance flag", "required": False, "group": "Supplier Quality"},
     "order_date": {"label": "Order / PO date", "required": False, "group": "PO & Commercial"},
     "promised_ship_date": {"label": "Promised ship date", "required": False, "group": "PO & Commercial"},
     "carrier": {"label": "Carrier / logistics provider", "required": False, "group": "Shipment"},
@@ -54,7 +57,7 @@ CANONICAL_FIELDS = {
     "estimated_arrival": {"label": "Estimated arrival / ETA", "required": False, "group": "Shipment"},
     "actual_delivered_date": {"label": "Actual delivered date", "required": False, "group": "Shipment"},
     "shipment_status": {"label": "Shipment status", "required": False, "group": "Shipment"},
-    "roj_date": {"label": "Required-On-Job (ROJ) date", "required": True, "group": "Schedule"},
+    "roj_date": {"label": "Required-On-Job (ROJ) date", "required": False, "group": "Schedule"},
     "float_days": {"label": "Schedule float (days)", "required": False, "group": "Schedule"},
     "is_critical_path": {"label": "Critical-path flag", "required": False, "group": "Schedule"},
     "snapshot_date": {"label": "Historical prediction snapshot date", "required": False, "group": "Operational Signals"},
@@ -69,12 +72,15 @@ CANONICAL_FIELDS = {
 SYNONYMS: Dict[str, List[str]] = {
     "project_name": ["project", "project name", "job", "job name", "project title"],
     "material_description": ["material", "material description", "item", "item description", "description", "material name", "product"],
-    "material_class": ["material class", "category", "material category", "item class", "commodity", "discipline"],
+    "material_class": ["material class", "category", "material category", "item category", "item class", "commodity", "discipline"],
     "sku": ["sku", "material code", "item code", "product code", "material id", "item id"],
     "vendor_name": ["vendor", "vendor name", "supplier", "supplier name", "manufacturer", "seller"],
-    "po_number": ["po", "po number", "purchase order", "purchase order number", "po no", "order number"],
+    "po_number": ["po", "po id", "po number", "purchase order", "purchase order number", "po no", "order number"],
     "quantity": ["quantity", "qty", "ordered quantity", "order qty"],
     "unit_price": ["unit price", "price", "rate", "unit cost", "cost per unit"],
+    "negotiated_price": ["negotiated price", "agreed price", "contract price", "final price", "negotiated unit price"],
+    "defective_units": ["defective units", "defects", "defect quantity", "rejected units", "rejected qty", "quality rejects"],
+    "compliance": ["compliance", "compliant", "compliance flag", "supplier compliance", "vendor compliance"],
     "order_date": ["order date", "po date", "purchase date", "ordered date", "date ordered"],
     "promised_ship_date": ["promised ship date", "promised date", "committed ship date", "planned ship date", "promised dispatch", "commit date"],
     "carrier": ["carrier", "logistics provider", "freight provider", "courier", "transporter"],
@@ -82,7 +88,7 @@ SYNONYMS: Dict[str, List[str]] = {
     "shipped_date": ["shipped date", "ship date", "dispatch date", "despatch date", "actual ship date", "date shipped"],
     "estimated_arrival": ["estimated arrival", "eta", "expected delivery", "expected arrival", "forecast arrival", "estimated delivery date"],
     "actual_delivered_date": ["actual delivered date", "actual delivery", "delivery date", "actual arrival", "received date", "date delivered"],
-    "shipment_status": ["shipment status", "delivery status", "logistics status", "status", "shipping status"],
+    "shipment_status": ["shipment status", "delivery status", "order status", "procurement status", "logistics status", "status", "shipping status"],
     "roj_date": ["roj", "roj date", "required on job", "required on job date", "required date", "need by date", "required at site", "site required date"],
     "float_days": ["float", "float days", "schedule float", "total float", "slack", "slack days"],
     "is_critical_path": ["critical path", "is critical", "critical", "critical path flag", "on critical path"],
@@ -100,7 +106,7 @@ DATE_FIELDS = {
     "actual_delivered_date", "roj_date", "snapshot_date", "latest_vendor_comm_date",
     "submitted_date", "approved_date",
 }
-NUMERIC_FIELDS = {"quantity", "unit_price", "float_days", "latest_vendor_delay_days"}
+NUMERIC_FIELDS = {"quantity", "unit_price", "negotiated_price", "defective_units", "float_days", "latest_vendor_delay_days"}
 
 
 def _norm_name(value: Any) -> str:
@@ -203,6 +209,12 @@ def _infer_material_class(description: Any) -> str:
 
 
 def normalize_dataset(raw_df: pd.DataFrame, mapping: Dict[str, Optional[str]]) -> pd.DataFrame:
+    """Normalize an arbitrary procurement export into the lab contract.
+
+    The function intentionally preserves business status semantics. A Delivery_Date
+    on a cancelled/pending row is not automatically treated as a completed outcome;
+    procurement-history training later requires an explicit Delivered status.
+    """
     out = pd.DataFrame(index=raw_df.index)
     for canonical in CANONICAL_FIELDS:
         src = mapping.get(canonical)
@@ -219,7 +231,7 @@ def normalize_dataset(raw_df: pd.DataFrame, mapping: Dict[str, Optional[str]]) -
 
     for col in ["project_name", "material_description", "material_class", "sku", "vendor_name",
                 "po_number", "carrier", "tracking_number", "shipment_status", "latest_comm_type",
-                "submittal_status"]:
+                "submittal_status", "compliance"]:
         out[col] = out[col].astype("string").str.strip()
         out.loc[out[col].isin(["", "nan", "None", "<NA>"]), col] = pd.NA
 
@@ -227,6 +239,9 @@ def normalize_dataset(raw_df: pd.DataFrame, mapping: Dict[str, Optional[str]]) -
     out["material_class"] = out.apply(
         lambda r: r["material_class"] if pd.notna(r["material_class"]) else _infer_material_class(r["material_description"]), axis=1
     )
+    # Category-only procurement exports are common; use the category as a display
+    # description while keeping the original class feature intact.
+    out["material_description"] = out["material_description"].fillna(out["material_class"])
     out["carrier"] = out["carrier"].fillna("unknown")
     out["latest_comm_type"] = out["latest_comm_type"].fillna("none").astype(str).str.lower()
     out["submittal_status"] = out["submittal_status"].fillna("unknown").astype(str).str.lower()
@@ -234,33 +249,85 @@ def normalize_dataset(raw_df: pd.DataFrame, mapping: Dict[str, Optional[str]]) -
     out["latest_vendor_delay_days"] = out["latest_vendor_delay_days"].fillna(0).clip(lower=0)
     out["quantity"] = out["quantity"].fillna(0)
     out["unit_price"] = out["unit_price"].fillna(0)
+    out["negotiated_price"] = out["negotiated_price"].fillna(out["unit_price"])
+    out["defective_units"] = out["defective_units"].fillna(0).clip(lower=0)
+    out["compliance_known"] = out["compliance"].notna()
+    out["compliance"] = out["compliance"].fillna("unknown")
+    out["compliance_int"] = out["compliance"].apply(lambda v: 1 if _norm_name(v) in {"yes", "y", "true", "1", "compliant", "pass", "passed"} else 0)
 
     def status_for(r):
+        value = _norm_name(r["shipment_status"])
+        aliases = {
+            "in transit": "in_transit", "intransit": "in_transit", "transit": "in_transit",
+            "late": "delayed", "delay": "delayed", "delayed": "delayed",
+            "not shipped": "not_shipped", "ordered": "not_shipped", "fabrication": "not_shipped",
+            "manufacturing": "not_shipped", "pending": "pending",
+            "partially delivered": "partially_delivered", "partial delivery": "partially_delivered",
+            "part delivered": "partially_delivered", "cancelled": "cancelled", "canceled": "cancelled",
+            "delivered": "delivered", "received": "delivered", "complete": "delivered", "completed": "delivered",
+        }
+        if value:
+            return aliases.get(value, value.replace(" ", "_"))
+        # If status is absent, only infer delivered from an actual date.
         if pd.notna(r["actual_delivered_date"]):
             return "delivered"
-        value = _norm_name(r["shipment_status"])
-        if value:
-            aliases = {
-                "in transit": "in_transit", "intransit": "in_transit", "transit": "in_transit",
-                "late": "delayed", "delay": "delayed", "delayed": "delayed",
-                "not shipped": "not_shipped", "pending": "not_shipped", "ordered": "not_shipped",
-                "fabrication": "not_shipped", "manufacturing": "not_shipped",
-                "delivered": "delivered", "received": "delivered", "complete": "delivered",
-            }
-            return aliases.get(value, value.replace(" ", "_"))
         return "in_transit" if pd.notna(r["shipped_date"]) else "not_shipped"
 
     out["shipment_status"] = out.apply(status_for, axis=1)
+
+    # ROJ-specific completed history remains strict because the classifier target
+    # requires a real ROJ outcome and ship-to-delivery lead time.
     out["is_historical_completed"] = (
-        out["actual_delivered_date"].notna()
+        (out["shipment_status"] == "delivered")
+        & out["actual_delivered_date"].notna()
         & out["shipped_date"].notna()
         & out["roj_date"].notna()
     )
-    out["is_active"] = ~out["is_historical_completed"] & out["roj_date"].notna()
+    out["is_active"] = (
+        ~out["is_historical_completed"]
+        & out["roj_date"].notna()
+        & ~out["shipment_status"].isin(["delivered", "cancelled"])
+    )
 
-    # Preserve source row for traceability/downloads.
+    # Dedicated procurement-history outcome: order -> actual delivery. This is
+    # deliberately separate from the ROJ model so a KPI dataset without schedule
+    # fields can still train a legitimate real-data lead-time regressor.
+    valid_order_delivery = out["order_date"].notna() & out["actual_delivered_date"].notna()
+    nonnegative = pd.Series(False, index=out.index)
+    idx = out.index[valid_order_delivery]
+    if len(idx):
+        nonnegative.loc[idx] = [out.at[i, "actual_delivered_date"] >= out.at[i, "order_date"] for i in idx]
+    out["is_clean_procurement_delivery"] = (out["shipment_status"] == "delivered") & valid_order_delivery & nonnegative
+    out["procurement_lead_time_days"] = np.nan
+    good = out["is_clean_procurement_delivery"]
+    if good.any():
+        out.loc[good, "procurement_lead_time_days"] = [
+            (a - o).days for a, o in zip(out.loc[good, "actual_delivered_date"], out.loc[good, "order_date"])
+        ]
+    out["discount_pct"] = np.where(
+        out["unit_price"] > 0,
+        ((out["unit_price"] - out["negotiated_price"]) / out["unit_price"]).clip(-1, 1),
+        0.0,
+    )
+    out["defect_rate"] = np.where(out["quantity"] > 0, (out["defective_units"] / out["quantity"]).clip(0, 1), 0.0)
+
     out["source_row"] = np.arange(2, len(out) + 2)
     return out
+
+
+def detect_dataset_mode(df: pd.DataFrame) -> str:
+    """Classify the normalized upload into the strongest supported workflow."""
+    if df.empty:
+        return "unknown"
+    roj_rows = int(df["roj_date"].notna().sum())
+    material_rows = int((df["material_description"].notna() | df["material_class"].notna()).sum())
+    vendor_rows = int(df["vendor_name"].notna().sum())
+    clean_proc = int(df.get("is_clean_procurement_delivery", pd.Series(False, index=df.index)).sum())
+    if roj_rows >= max(1, int(len(df) * 0.20)) and material_rows > 0 and vendor_rows > 0:
+        return "roj_project"
+    if clean_proc >= 10 and vendor_rows > 0 and material_rows > 0:
+        return "procurement_history"
+    return "generic"
 
 
 @dataclass
@@ -277,6 +344,16 @@ class ValidationReport:
     on_time_rows: int
     missed_roj_rows: int
     class_balance_ok: bool
+    mode: str = "unknown"
+    clean_delivered_rows: int = 0
+    categories: int = 0
+    cancelled_rows: int = 0
+    partial_rows: int = 0
+    pending_rows: int = 0
+    delivered_rows: int = 0
+    missing_delivery_dates: int = 0
+    invalid_order_delivery_rows: int = 0
+    compliance_rate: Optional[float] = None
 
     def as_dict(self) -> Dict[str, Any]:
         return self.__dict__.copy()
@@ -286,49 +363,76 @@ def validate_dataset(df: pd.DataFrame) -> ValidationReport:
     errors: List[str] = []
     warnings: List[str] = []
     missing_required: Dict[str, int] = {}
+    mode = detect_dataset_mode(df)
 
-    for field, meta in CANONICAL_FIELDS.items():
-        if meta["required"]:
-            count = int(df[field].isna().sum())
-            missing_required[field] = count
-            if count == len(df):
-                errors.append(f"Required field '{meta['label']}' is entirely missing.")
-            elif count:
-                warnings.append(f"{count} row(s) are missing {meta['label']}.")
+    status = df["shipment_status"].fillna("unknown").astype(str)
+    clean_proc = df[df["is_clean_procurement_delivery"]].copy()
+    delivered_rows = int((status == "delivered").sum())
+    cancelled_rows = int((status == "cancelled").sum())
+    partial_rows = int((status == "partially_delivered").sum())
+    pending_rows = int(status.isin(["pending", "not_shipped", "in_transit", "delayed"]).sum())
+    missing_delivery_dates = int(df["actual_delivered_date"].isna().sum())
+    valid_pair = df["order_date"].notna() & df["actual_delivered_date"].notna()
+    invalid_dates = 0
+    if valid_pair.any():
+        invalid_dates = int(sum(a < o for a, o in zip(df.loc[valid_pair, "actual_delivered_date"], df.loc[valid_pair, "order_date"])))
+
+    if df["vendor_name"].notna().sum() == 0:
+        errors.append("Vendor / supplier could not be mapped. Map a supplier field before continuing.")
+    if (df["material_description"].notna() | df["material_class"].notna()).sum() == 0:
+        errors.append("Material description or category could not be mapped.")
 
     hist = df[df["is_historical_completed"]].copy()
     active = df[df["is_active"]].copy()
-    if len(active) == 0:
-        warnings.append("No active rows detected. Prediction output will be empty until active/non-delivered rows are supplied.")
-    if len(hist) < 50:
-        warnings.append(f"Only {len(hist)} completed historical rows detected. Real-data retraining requires at least 50 usable completed rows; use Prototype Model mode otherwise.")
-
     missed = 0
     on_time = 0
-    if len(hist):
-        valid = hist.dropna(subset=["actual_delivered_date", "roj_date"])
-        missed = int(sum(a > r for a, r in zip(valid["actual_delivered_date"], valid["roj_date"])))
-        on_time = len(valid) - missed
-        if missed == 0 or on_time == 0:
-            warnings.append("Historical ROJ outcomes contain only one class; classifier retraining needs both on-time and missed-ROJ examples.")
 
-    # Data plausibility checks.
+    if mode == "roj_project":
+        if df["roj_date"].notna().sum() == 0:
+            errors.append("ROJ date is required for project ROJ-risk mode.")
+        if len(active) == 0:
+            warnings.append("No active ROJ rows detected. Prediction output will be empty until active/non-delivered rows are supplied.")
+        if len(hist) < 50:
+            warnings.append(f"Only {len(hist)} completed ROJ history rows detected. Classifier retraining requires at least 50 usable completed rows; use Prototype Model mode otherwise.")
+        if len(hist):
+            valid = hist.dropna(subset=["actual_delivered_date", "roj_date"])
+            missed = int(sum(a > r for a, r in zip(valid["actual_delivered_date"], valid["roj_date"])))
+            on_time = len(valid) - missed
+            if missed == 0 or on_time == 0:
+                warnings.append("Historical ROJ outcomes contain only one class; classifier retraining needs both on-time and missed-ROJ examples.")
+        if df["snapshot_date"].notna().sum() == 0 and len(hist):
+            warnings.append("No historical snapshot/status date was mapped. Retraining derives a conservative pre-delivery snapshot; true status dates are better for leakage control.")
+    elif mode == "procurement_history":
+        if df["order_date"].notna().sum() == 0:
+            errors.append("Order date is required for procurement-history lead-time modelling.")
+        if len(clean_proc) < 50:
+            warnings.append(f"Only {len(clean_proc)} clean delivered rows are available. At least 50 are recommended for real-data lead-time retraining.")
+        warnings.append("No project ROJ schedule was detected. The lab will train a real lead-time model and let you supply an ROJ date in the New Procurement scenario form; it will not claim a historical ROJ classifier.")
+        if invalid_dates:
+            warnings.append(f"{invalid_dates} row(s) have delivery before order date and are excluded from training.")
+        delivered_missing = int(((status == "delivered") & df["actual_delivered_date"].isna()).sum())
+        if delivered_missing:
+            warnings.append(f"{delivered_missing} Delivered row(s) are missing Delivery Date and are excluded from lead-time training.")
+    else:
+        errors.append("The upload does not yet contain enough fields for ROJ project mode or historical procurement mode. Map supplier, material/category, and either ROJ schedule data or completed order-to-delivery history.")
+
+    # Generic plausibility checks.
     if ((df["promised_ship_date"].notna()) & (df["order_date"].notna())).any():
         bad = df[df["promised_ship_date"].notna() & df["order_date"].notna()].apply(
             lambda r: r["promised_ship_date"] < r["order_date"], axis=1
         ).sum()
         if bad:
             warnings.append(f"{int(bad)} row(s) have promised ship date before order date.")
-    if len(hist):
-        bad_lead = hist.apply(lambda r: (r["actual_delivered_date"] - r["shipped_date"]).days < 0, axis=1).sum()
-        if bad_lead:
-            warnings.append(f"{int(bad_lead)} completed row(s) have delivery before ship date and will be excluded from retraining.")
 
-    total_cells = max(len(df) * 6, 1)
-    key_missing = sum(int(df[f].isna().sum()) for f in ["material_description", "vendor_name", "roj_date", "order_date", "promised_ship_date", "po_number"])
+    if mode == "procurement_history":
+        key_fields = ["vendor_name", "material_class", "order_date", "shipment_status", "quantity", "unit_price"]
+    else:
+        key_fields = ["material_description", "vendor_name", "roj_date", "order_date", "promised_ship_date", "po_number"]
+    total_cells = max(len(df) * len(key_fields), 1)
+    key_missing = sum(int(df[f].isna().sum()) for f in key_fields if f in df.columns)
     quality = int(round(max(0, min(100, 100 * (1 - key_missing / total_cells)))))
-    if "snapshot_date" in df.columns and df["snapshot_date"].notna().sum() == 0 and len(hist):
-        warnings.append("No historical snapshot/status date was mapped. Retraining will derive a conservative pre-delivery snapshot from ship/promised dates; supplying true snapshot dates is better for leakage control.")
+    known_comp = df[df.get("compliance_known", pd.Series(False, index=df.index))]
+    compliance_rate = float(known_comp["compliance_int"].mean()) if len(known_comp) else None
 
     return ValidationReport(
         rows=len(df), historical_rows=len(hist), active_rows=len(active),
@@ -336,6 +440,10 @@ def validate_dataset(df: pd.DataFrame) -> ValidationReport:
         materials=int(df["material_description"].nunique(dropna=True)),
         quality_score=quality, missing_required=missing_required, warnings=warnings, errors=errors,
         on_time_rows=on_time, missed_roj_rows=missed, class_balance_ok=(missed > 0 and on_time > 0),
+        mode=mode, clean_delivered_rows=len(clean_proc),
+        categories=int(df["material_class"].nunique(dropna=True)),
+        cancelled_rows=cancelled_rows, partial_rows=partial_rows, pending_rows=pending_rows, delivered_rows=delivered_rows,
+        missing_delivery_dates=missing_delivery_dates, invalid_order_delivery_rows=invalid_dates, compliance_rate=compliance_rate,
     )
 
 
@@ -721,12 +829,303 @@ def score_with_prototype_model(active_df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows).sort_values("Miss ROJ probability", ascending=False).reset_index(drop=True)
 
 
+
+# ---------------------------------------------------------------------------
+# Historical Procurement Mode: supplier KPIs + real lead-time prediction
+# ---------------------------------------------------------------------------
+
+PROC_CATEGORICAL = ["vendor_name", "material_class"]
+PROC_NUMERIC = [
+    "quantity", "unit_price", "negotiated_price", "discount_pct",
+    "prior_supplier_avg_lead", "prior_supplier_compliance_rate",
+    "prior_supplier_defect_rate",
+]
+
+
+def _completion_status_score(status: str) -> float:
+    return 1.0 if status == "delivered" else (0.5 if status == "partially_delivered" else 0.0)
+
+
+def build_supplier_intelligence(df: pd.DataFrame) -> pd.DataFrame:
+    """Create supplier KPIs without inventing an on-time metric.
+
+    If promised delivery dates are absent, the table reports observed completion,
+    lead time, quality, compliance and commercial savings only.
+    """
+    rows = []
+    for supplier, g in df.groupby("vendor_name", dropna=True):
+        g = g.copy()
+        clean = g[g["is_clean_procurement_delivery"]]
+        orders = len(g)
+        delivered = int((g["shipment_status"] == "delivered").sum())
+        partial = int((g["shipment_status"] == "partially_delivered").sum())
+        pending = int(g["shipment_status"].isin(["pending", "not_shipped", "in_transit", "delayed"]).sum())
+        cancelled = int((g["shipment_status"] == "cancelled").sum())
+        completion_rate = delivered / orders if orders else 0.0
+        known_comp = g[g.get("compliance_known", pd.Series(False, index=g.index))]
+        compliance_rate = float(known_comp["compliance_int"].mean()) if len(known_comp) else 0.80
+        qty = float(g["quantity"].clip(lower=0).sum())
+        defects = float(g["defective_units"].clip(lower=0).sum())
+        defect_rate = defects / qty if qty > 0 else 0.0
+        gross = float((g["unit_price"].clip(lower=0) * g["quantity"].clip(lower=0)).sum())
+        negotiated = float((g["negotiated_price"].clip(lower=0) * g["quantity"].clip(lower=0)).sum())
+        savings_rate = (gross - negotiated) / gross if gross > 0 else 0.0
+        leads = pd.to_numeric(clean["procurement_lead_time_days"], errors="coerce").dropna()
+        avg_lead = float(leads.mean()) if len(leads) else np.nan
+        median_lead = float(leads.median()) if len(leads) else np.nan
+        p90_lead = float(leads.quantile(.90)) if len(leads) else np.nan
+        lead_std = float(leads.std(ddof=0)) if len(leads) > 1 else 0.0
+        stability = 1.0 - min(lead_std / max(avg_lead, 1.0), 1.0) if pd.notna(avg_lead) else 0.5
+        quality = max(0.0, min(1.0, 1.0 - defect_rate))
+        cancellation_free = 1.0 - (cancelled / orders if orders else 0.0)
+        health = 100 * (
+            0.30 * completion_rate + 0.25 * compliance_rate + 0.20 * quality
+            + 0.15 * cancellation_free + 0.10 * stability
+        )
+        rows.append({
+            "Supplier": str(supplier), "Orders": orders, "Delivered": delivered,
+            "Partial": partial, "Pending": pending, "Cancelled": cancelled,
+            "Clean delivered": len(clean), "Completion rate": completion_rate,
+            "Compliance rate": compliance_rate, "Defect rate": defect_rate,
+            "Weighted savings rate": savings_rate, "Avg lead time days": avg_lead,
+            "Median lead time days": median_lead, "P90 lead time days": p90_lead,
+            "Lead-time std days": lead_std, "Supplier health score": round(health, 1),
+        })
+    if not rows:
+        return pd.DataFrame()
+    return pd.DataFrame(rows).sort_values(["Supplier health score", "Clean delivered"], ascending=[False, False]).reset_index(drop=True)
+
+
+def build_category_intelligence(df: pd.DataFrame) -> pd.DataFrame:
+    clean = df[df["is_clean_procurement_delivery"]].copy()
+    rows = []
+    for cat, g in clean.groupby("material_class", dropna=True):
+        leads = pd.to_numeric(g["procurement_lead_time_days"], errors="coerce").dropna()
+        if not len(leads):
+            continue
+        rows.append({
+            "Category": str(cat), "Completed samples": len(leads),
+            "Avg lead time days": round(float(leads.mean()), 1),
+            "Median lead time days": round(float(leads.median()), 1),
+            "P90 lead time days": round(float(leads.quantile(.90)), 1),
+        })
+    return pd.DataFrame(rows).sort_values("Avg lead time days", ascending=False).reset_index(drop=True) if rows else pd.DataFrame()
+
+
+def _prior_procurement_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Build leakage-reduced training rows using only supplier deliveries known before each order date."""
+    clean = df[df["is_clean_procurement_delivery"]].copy()
+    clean = clean.sort_values(["order_date", "source_row"]).reset_index(drop=True)
+    if clean.empty:
+        return pd.DataFrame()
+    records = []
+    for i, row in clean.iterrows():
+        order_date = row["order_date"]
+        known = clean.iloc[:i]
+        if len(known):
+            known = known[known["actual_delivered_date"].apply(lambda d: pd.notna(d) and d < order_date)]
+        supplier = str(row.get("vendor_name") or "unknown")
+        category = str(row.get("material_class") or "unknown")
+        prior_s = known[known["vendor_name"].astype(str) == supplier] if len(known) else known
+        prior_c = known[known["material_class"].astype(str) == category] if len(known) else known
+        base = prior_s if len(prior_s) else (prior_c if len(prior_c) else known)
+        if len(base):
+            avg_lead = float(pd.to_numeric(base["procurement_lead_time_days"], errors="coerce").dropna().mean())
+            compliance = float(base["compliance_int"].mean())
+            qty = float(base["quantity"].clip(lower=0).sum())
+            defects = float(base["defective_units"].clip(lower=0).sum())
+            defect_rate = defects / qty if qty > 0 else 0.0
+            completion = 1.0  # base contains known clean completed deliveries only
+        else:
+            avg_lead, compliance, defect_rate, completion = 14.0, 0.80, 0.05, 0.70
+        records.append({
+            "source_row": int(row["source_row"]), "order_date": order_date,
+            "vendor_name": supplier, "material_class": category,
+            "quantity": float(row.get("quantity") or 0), "unit_price": float(row.get("unit_price") or 0),
+            "negotiated_price": float(row.get("negotiated_price") or row.get("unit_price") or 0),
+            "discount_pct": float(row.get("discount_pct") or 0),
+            "prior_supplier_avg_lead": float(avg_lead if pd.notna(avg_lead) else 14.0),
+            "prior_supplier_compliance_rate": float(compliance),
+            "prior_supplier_defect_rate": float(defect_rate),
+            "prior_supplier_completion_rate": float(completion),
+            "lead_time_days": float(row["procurement_lead_time_days"]),
+        })
+    return pd.DataFrame(records)
+
+
+def train_procurement_lead_time_model(df: pd.DataFrame, min_rows: int = 50) -> Dict[str, Any]:
+    training = _prior_procurement_features(df)
+    if len(training) < min_rows:
+        return {"status": "insufficient_data", "rows_available": len(training), "rows_required": min_rows,
+                "note": "Not enough clean Delivered rows for procurement lead-time training."}
+    training = training.sort_values(["order_date", "source_row"]).reset_index(drop=True)
+    split = min(max(int(len(training) * .80), 1), len(training) - 1)
+    tr, te = training.iloc[:split].copy(), training.iloc[split:].copy()
+    enc = OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1)
+    enc.fit(tr[PROC_CATEGORICAL].fillna("unknown").astype(str))
+
+    def matrix(frame):
+        cats = enc.transform(frame[PROC_CATEGORICAL].fillna("unknown").astype(str))
+        cats = pd.DataFrame(cats, columns=[c + "_enc" for c in PROC_CATEGORICAL], index=frame.index)
+        nums = frame[PROC_NUMERIC].apply(pd.to_numeric, errors="coerce").fillna(0)
+        return pd.concat([cats, nums], axis=1)
+
+    Xtr, Xte = matrix(tr), matrix(te)
+    model = XGBRegressor(
+        n_estimators=200, max_depth=1, learning_rate=.02, subsample=.90,
+        colsample_bytree=.90, random_state=42, objective="reg:squarederror",
+        reg_lambda=5.0, min_child_weight=10,
+    )
+    model.fit(Xtr, tr["lead_time_days"])
+    pred = model.predict(Xte)
+    residual = te["lead_time_days"].to_numpy(dtype=float) - pred.astype(float)
+    mae = float(mean_absolute_error(te["lead_time_days"], pred))
+    baseline_value = float(tr["lead_time_days"].mean())
+    baseline_mae = float(mean_absolute_error(te["lead_time_days"], np.full(len(te), baseline_value)))
+    model_lift = ((baseline_mae - mae) / baseline_mae * 100.0) if baseline_mae > 0 else 0.0
+    medae = float(np.median(np.abs(residual)))
+    rmse = float(np.sqrt(np.mean(residual ** 2)))
+    ss_res = float(np.sum(residual ** 2))
+    y = te["lead_time_days"].to_numpy(dtype=float)
+    ss_tot = float(np.sum((y - y.mean()) ** 2))
+    r2 = 1 - ss_res / ss_tot if ss_tot > 0 else None
+    residual_std = float(np.std(residual, ddof=1)) if len(residual) > 1 else max(mae * 1.25, 3.0)
+    supplier_kpis = build_supplier_intelligence(df)
+    category_kpis = build_category_intelligence(df)
+    metrics = {
+        "status": "trained", "rows_used": len(training), "train_rows": len(tr), "holdout_rows": len(te),
+        "lead_time_mae_days": round(mae, 2), "baseline_mae_days": round(baseline_mae, 2),
+        "model_lift_vs_baseline_pct": round(model_lift, 1), "median_abs_error_days": round(medae, 2),
+        "rmse_days": round(rmse, 2), "r2": round(float(r2), 3) if r2 is not None else None,
+        "residual_std_days": round(max(residual_std, 1.0), 2),
+        "model_grade": "strong demo history" if len(training) >= 500 else ("usable demo history" if len(training) >= 200 else "experimental history"),
+    }
+    return {**metrics, "bundle": {
+        "model": model, "encoder": enc,
+        "feature_cols": [c + "_enc" for c in PROC_CATEGORICAL] + PROC_NUMERIC,
+        "supplier_kpis": supplier_kpis, "category_kpis": category_kpis,
+        "residual_std_days": max(residual_std, 1.0), "metrics": metrics,
+    }}
+
+
+def _normal_cdf(x: float) -> float:
+    import math
+    return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+
+
+def _supplier_defaults(bundle: Dict[str, Any], supplier: str) -> Dict[str, float]:
+    k = bundle.get("supplier_kpis")
+    if isinstance(k, pd.DataFrame) and not k.empty:
+        m = k[k["Supplier"].astype(str) == str(supplier)]
+        if not m.empty:
+            r = m.iloc[0]
+            return {
+                "avg_lead": float(r["Avg lead time days"]) if pd.notna(r["Avg lead time days"]) else 14.0,
+                "compliance": float(r["Compliance rate"]), "defect": float(r["Defect rate"]),
+                "completion": float(r["Completion rate"]), "health": float(r["Supplier health score"]),
+                "cancel": float(r["Cancelled"]) / max(float(r["Orders"]), 1),
+            }
+    return {"avg_lead": 14.0, "compliance": .80, "defect": .05, "completion": .70, "health": 70.0, "cancel": .10}
+
+
+def predict_procurement_scenario(bundle: Dict[str, Any], *, supplier: str, material_class: str,
+                                 quantity: float, unit_price: float, negotiated_price: float,
+                                 order_date: date, roj_date: date, float_days: float = 0,
+                                 is_critical_path: bool = False) -> Dict[str, Any]:
+    stats = _supplier_defaults(bundle, supplier)
+    discount = ((unit_price - negotiated_price) / unit_price) if unit_price and unit_price > 0 else 0.0
+    row = pd.DataFrame([{
+        "vendor_name": supplier, "material_class": material_class,
+        "quantity": float(quantity), "unit_price": float(unit_price), "negotiated_price": float(negotiated_price),
+        "discount_pct": float(max(-1, min(1, discount))),
+        "prior_supplier_avg_lead": stats["avg_lead"],
+        "prior_supplier_compliance_rate": stats["compliance"],
+        "prior_supplier_defect_rate": stats["defect"],
+        "prior_supplier_completion_rate": stats["completion"],
+    }])
+    cats = bundle["encoder"].transform(row[PROC_CATEGORICAL].fillna("unknown").astype(str))
+    cats = pd.DataFrame(cats, columns=[c + "_enc" for c in PROC_CATEGORICAL])
+    X = pd.concat([cats, row[PROC_NUMERIC].reset_index(drop=True)], axis=1)
+    lead = max(0.0, float(bundle["model"].predict(X[bundle["feature_cols"]])[0]))
+    arrival = order_date + timedelta(days=int(round(lead)))
+    days_available = (roj_date - order_date).days
+    margin = (roj_date - arrival).days
+    sigma = max(float(bundle.get("residual_std_days") or 4.0), 1.5)
+    p_miss = 1.0 - _normal_cdf((days_available - lead) / sigma)
+    effective_float = 0.0 if is_critical_path else max(0.0, float(float_days))
+    p_impact = 1.0 - _normal_cdf((days_available + effective_float - lead) / sigma)
+    # Transparent operational overlay: supplier health and criticality can raise
+    # the action priority, while the statistical schedule probability remains visible.
+    health_penalty = max(0.0, (70.0 - stats["health"]) / 100.0) * .18
+    critical_penalty = .06 if is_critical_path and margin <= 5 else 0.0
+    adjusted = max(p_miss, min(.98, p_miss + health_penalty + critical_penalty))
+    risk = _risk_level(adjusted)
+    drivers = [
+        f"Predicted order-to-delivery lead time {lead:.1f}d vs {days_available}d available to ROJ",
+        f"Supplier health {stats['health']:.0f}/100; historical completion {stats['completion']*100:.0f}%",
+        f"Historical compliance {stats['compliance']*100:.0f}% and defect rate {stats['defect']*100:.1f}%",
+    ]
+    if margin < 0:
+        drivers.insert(0, f"Forecast arrival is {abs(margin)}d after ROJ")
+    elif margin <= 5:
+        drivers.insert(0, f"Only {margin}d forecast buffer before ROJ")
+    if is_critical_path:
+        drivers.append("Material is marked critical path; schedule tolerance is treated conservatively")
+    elif float_days > 0:
+        drivers.append(f"{float_days:.0f}d schedule float reduces estimated schedule-impact probability")
+    return {
+        "Supplier": supplier, "Category": material_class, "Predicted lead time days": round(lead, 1),
+        "Order date": str(order_date), "Forecast arrival": str(arrival), "ROJ date": str(roj_date),
+        "Forecast margin days": int(margin), "Miss ROJ probability": round(float(adjusted), 3),
+        "Statistical miss probability": round(float(p_miss), 3),
+        "Schedule impact probability": round(float(p_impact), 3), "Risk": risk,
+        "Supplier health score": round(stats["health"], 1), "Supplier completion rate": round(stats["completion"], 3),
+        "Supplier compliance rate": round(stats["compliance"], 3), "Supplier defect rate": round(stats["defect"], 4),
+        "Uncertainty sigma days": round(sigma, 2), "Critical path": bool(is_critical_path),
+        "Float days": float(float_days), "Model source": "Real procurement lead-time model + supplied ROJ scenario",
+        "Drivers": drivers,
+    }
+
+
+def compare_supplier_scenarios(bundle: Dict[str, Any], **scenario) -> pd.DataFrame:
+    k = bundle.get("supplier_kpis")
+    suppliers = list(k["Supplier"].astype(str)) if isinstance(k, pd.DataFrame) and not k.empty else [scenario.get("supplier", "unknown")]
+    rows = []
+    for supplier in suppliers:
+        payload = dict(scenario)
+        payload["supplier"] = supplier
+        result = predict_procurement_scenario(bundle, **payload)
+        rows.append({
+            "Supplier": supplier, "Risk": result["Risk"], "Risk %": round(result["Miss ROJ probability"] * 100, 1),
+            "Predicted lead time": result["Predicted lead time days"], "Forecast arrival": result["Forecast arrival"],
+            "Margin days": result["Forecast margin days"], "Supplier health": result["Supplier health score"],
+        })
+    return pd.DataFrame(rows).sort_values(["Risk %", "Predicted lead time", "Supplier health"], ascending=[True, True, False]).reset_index(drop=True)
+
+
+def procurement_history_template_csv_bytes() -> bytes:
+    template = pd.DataFrame([
+        {
+            "PO_ID": "PO-00001", "Supplier": "Supplier_A", "Order_Date": "2025-01-10",
+            "Delivery_Date": "2025-01-22", "Item_Category": "Raw Materials", "Order_Status": "Delivered",
+            "Quantity": 1000, "Unit_Price": 64.0, "Negotiated_Price": 60.5,
+            "Defective_Units": 12, "Compliance": "Yes",
+        },
+        {
+            "PO_ID": "PO-00002", "Supplier": "Supplier_B", "Order_Date": "2025-02-01",
+            "Delivery_Date": "", "Item_Category": "MRO", "Order_Status": "Pending",
+            "Quantity": 250, "Unit_Price": 91.0, "Negotiated_Price": 87.0,
+            "Defective_Units": "", "Compliance": "Yes",
+        },
+    ])
+    return template.to_csv(index=False).encode("utf-8")
+
 def template_csv_bytes() -> bytes:
     template = pd.DataFrame([
         {
             "Project Name": "Example Data Center", "Material Description": "2000 kVA Transformer",
             "Material Class": "electrical", "SKU": "TX-2000-01", "Vendor Name": "Example Electricals",
-            "PO Number": "PO-1001", "Quantity": 1, "Unit Price": 2500000, "Order Date": "2026-04-01",
+            "PO Number": "PO-1001", "Quantity": 1, "Unit Price": 2500000, "Negotiated Price": 2400000, "Defective Units": 0, "Compliance": "Yes", "Order Date": "2026-04-01",
             "Promised Ship Date": "2026-07-15", "Carrier": "Example Freight", "Shipped Date": "2026-07-18",
             "Estimated Arrival": "2026-08-29", "Actual Delivered Date": "", "Shipment Status": "in_transit",
             "ROJ Date": "2026-08-25", "Float Days": 1, "Critical Path": "Yes", "Vendor Delay Days": 4,
@@ -736,7 +1135,7 @@ def template_csv_bytes() -> bytes:
         {
             "Project Name": "Example Data Center", "Material Description": "Cable tray assembly",
             "Material Class": "electrical", "SKU": "CT-101", "Vendor Name": "Example Electricals",
-            "PO Number": "PO-HIST-01", "Quantity": 120, "Unit Price": 800, "Order Date": "2025-06-01",
+            "PO Number": "PO-HIST-01", "Quantity": 120, "Unit Price": 800, "Negotiated Price": 760, "Defective Units": 2, "Compliance": "Yes", "Order Date": "2025-06-01",
             "Promised Ship Date": "2025-06-28", "Carrier": "Example Freight", "Shipped Date": "2025-06-30",
             "Estimated Arrival": "2025-07-12", "Actual Delivered Date": "2025-07-12", "Shipment Status": "delivered",
             "ROJ Date": "2025-07-15", "Float Days": 5, "Critical Path": "No", "Vendor Delay Days": 0,

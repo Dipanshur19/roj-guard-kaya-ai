@@ -12,7 +12,7 @@ import os
 import re
 import hashlib
 from collections import Counter
-from datetime import date
+from datetime import date, timedelta
 
 import pandas as pd
 import requests
@@ -23,7 +23,9 @@ from real_data_lab import (
     CANONICAL_FIELDS, suggest_column_mapping, excel_sheet_names, read_tabular_bytes,
     normalize_dataset, validate_dataset, build_real_feature_frames,
     train_real_data_models, score_with_real_model, score_with_prototype_model,
-    template_csv_bytes,
+    build_supplier_intelligence, build_category_intelligence,
+    train_procurement_lead_time_model, predict_procurement_scenario, compare_supplier_scenarios,
+    template_csv_bytes, procurement_history_template_csv_bytes,
 )
 
 BACKEND_URL = os.environ.get("BACKEND_URL", "http://127.0.0.1:8000")
@@ -708,18 +710,18 @@ elif page == "Real Data Lab":
     header(
         "Bring your own procurement data",
         "Real Data Lab",
-        "Upload a CSV/XLSX export, map the schema, validate data quality, optionally retrain an isolated model on completed delivery history, then score the active project without touching the deterministic demo dataset.",
+        "Upload a CSV/XLSX export. ROJ Guard detects whether it contains project ROJ data or procurement history, validates the schema, learns from legitimate historical outcomes, and keeps model provenance explicit.",
     )
     render_3d_hero(
-        "Bring real procurement history into the risk engine.",
-        "ROJ Guard maps unfamiliar enterprise schemas into a canonical procurement contract, separates completed history from active materials, and makes model provenance explicit before any prediction is shown.",
-        [("Input", "CSV / XLSX"), ("Mapping", "Automatic"), ("Training", "Isolated"), ("Output", "ROJ risk")],
+        "Turn unfamiliar procurement exports into decision-ready intelligence.",
+        "The lab supports two honest workflows: direct ROJ project scoring when schedule fields exist, or Historical Procurement Mode when the file contains order/delivery history but no ROJ dates.",
+        [("Input", "CSV / XLSX"), ("Mapping", "Automatic"), ("Quality", "Validated"), ("Models", "Isolated")],
         mode="ingest", compact=True,
     )
     render_glass_banner(
-        "Real data stays isolated from the hackathon demo baseline.",
-        "The lab never overwrites roj_guard.db or the baseline XGBoost artifacts. Choose Prototype Model mode for immediate inference, or retrain an in-session model when enough completed delivery outcomes are present.",
-        ["Schema mapping", "Quality gates", "Temporal holdout", "Downloadable predictions"],
+        "Real data stays isolated from the deterministic demo baseline.",
+        "Nothing here overwrites roj_guard.db or the baseline hackathon models. Historical Procurement Mode trains a separate order-to-delivery XGBoost model and converts its forecast into ROJ risk only after you provide a real project ROJ date.",
+        ["Schema mapping", "Supplier KPIs", "Leakage-reduced history", "Scenario prediction"],
         eyebrow="BYOD • safe evaluation workspace",
     )
 
@@ -729,36 +731,41 @@ elif page == "Real Data Lab":
             "Upload procurement export",
             type=["csv", "xlsx", "xlsm"],
             key="real_data_upload",
-            help="One row per material / PO line is ideal. Historical completed and current active lines may be in the same file.",
+            help="CSV/XLSX with one row per PO/material line. ROJ Guard can work with project schedule exports or pure procurement KPI history.",
         )
     with intro_b:
         st.download_button(
-            "Download input template",
+            "ROJ project template",
             data=template_csv_bytes(),
             file_name="roj_guard_real_data_template.csv",
             mime="text/csv",
             use_container_width=True,
         )
-        st.caption("Template fields are recommendations, not a strict naming requirement.")
+        st.download_button(
+            "Procurement history template",
+            data=procurement_history_template_csv_bytes(),
+            file_name="roj_guard_procurement_history_template.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+        st.caption("Two schemas; company column names can still differ.")
 
     if uploaded_real is None:
-        st.markdown('<div class="rg-section">What the lab expects</div>', unsafe_allow_html=True)
-        need1, need2, need3 = st.columns(3)
-        with need1:
-            st.markdown('<div class="rg-card"><div class="rg-eyebrow">Minimum to score</div><div style="font-weight:800;color:white;margin:7px 0">Material + vendor + ROJ</div><div class="rg-note">Current rows can be scored immediately. PO dates, ETA, critical path and live delay signals materially improve the result.</div></div>', unsafe_allow_html=True)
-        with need2:
-            st.markdown('<div class="rg-card"><div class="rg-eyebrow">Needed to retrain</div><div style="font-weight:800;color:white;margin:7px 0">Completed deliveries</div><div class="rg-note">Shipped date + actual delivered date + ROJ date create lead-time and missed-ROJ outcomes. At least 50 usable historical rows are required.</div></div>', unsafe_allow_html=True)
-        with need3:
-            st.markdown('<div class="rg-card"><div class="rg-eyebrow">Best-practice history</div><div style="font-weight:800;color:white;margin:7px 0">Snapshot / status date</div><div class="rg-note">A true historical status date makes validation more leakage-safe. Without it, the lab derives a conservative pre-delivery snapshot.</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="rg-section">Supported real-data workflows</div>', unsafe_allow_html=True)
+        a, b = st.columns(2)
+        with a:
+            st.markdown("""<div class="rg-card"><div class="rg-eyebrow">Project ROJ mode</div><div style="font-weight:820;color:white;margin:7px 0">Score active project materials</div><div class="rg-note">Best when the export contains supplier, material, ROJ date, PO/shipment context and current status. Historical rows can retrain the full miss-ROJ classifier when actual outcomes are available.</div></div>""", unsafe_allow_html=True)
+        with b:
+            st.markdown("""<div class="rg-card"><div class="rg-eyebrow">Historical procurement mode</div><div style="font-weight:820;color:white;margin:7px 0">Learn real lead-time + supplier behavior</div><div class="rg-note">Works when there is no ROJ column. Uses clean Delivered orders to train a real order-to-delivery model, builds supplier quality/compliance intelligence, then lets you enter an ROJ for a new procurement scenario.</div></div>""", unsafe_allow_html=True)
     else:
         file_bytes = uploaded_real.getvalue()
         signature = hashlib.sha1(file_bytes).hexdigest()
         previous_sig = st.session_state.get("real_data_signature")
         if signature != previous_sig:
-            # Reset derived state when the evaluator uploads a different dataset.
             for key in [
                 "real_mapping", "real_normalized", "real_validation", "real_training_df", "real_active_df",
                 "real_model_bundle", "real_model_metrics", "real_predictions", "real_train_status",
+                "real_proc_bundle", "real_proc_metrics", "real_proc_prediction", "real_proc_scenario",
             ]:
                 st.session_state.pop(key, None)
             st.session_state["real_data_signature"] = signature
@@ -770,7 +777,6 @@ elif page == "Real Data Lab":
                 sheet_name = st.selectbox("Workbook sheet", sheets, key="real_sheet")
             except Exception as exc:
                 st.error(f"Could not inspect workbook sheets: {exc}")
-                sheets = []
 
         try:
             raw_real = read_tabular_bytes(file_bytes, uploaded_real.name, sheet_name=sheet_name)
@@ -783,29 +789,34 @@ elif page == "Real Data Lab":
             if "real_mapping" not in st.session_state:
                 st.session_state["real_mapping"] = suggestions.copy()
 
+            likely_procurement = bool(
+                not suggestions.get("roj_date") and suggestions.get("order_date")
+                and suggestions.get("actual_delivered_date") and suggestions.get("vendor_name")
+            )
+            workflow_guess = "Historical procurement" if likely_procurement else "ROJ / project data"
+
             st.markdown('<div class="rg-section">1 • File intelligence</div>', unsafe_allow_html=True)
             fa, fb, fc, fd = st.columns(4)
-            fa.markdown(kpi_card("Rows detected", f"{len(raw_real):,}", uploaded_real.name), unsafe_allow_html=True)
-            fb.markdown(kpi_card("Columns detected", len(raw_real.columns), "Raw enterprise schema"), unsafe_allow_html=True)
-            mapped_count = sum(bool(v) for v in suggestions.values())
-            fc.markdown(kpi_card("Auto-mapped", mapped_count, f"of {len(CANONICAL_FIELDS)} canonical fields"), unsafe_allow_html=True)
-            fd.markdown(kpi_card("Input mode", "Real data", "Isolated workspace"), unsafe_allow_html=True)
+            fa.markdown(kpi_card("Rows", f"{len(raw_real):,}", uploaded_real.name), unsafe_allow_html=True)
+            fb.markdown(kpi_card("Columns", len(raw_real.columns), "Raw source schema"), unsafe_allow_html=True)
+            fc.markdown(kpi_card("Auto-mapped", sum(bool(v) for v in suggestions.values()), "Canonical fields"), unsafe_allow_html=True)
+            fd.markdown(kpi_card("Likely workflow", workflow_guess, "Confirmed after validation"), unsafe_allow_html=True)
 
             with st.expander("Preview uploaded rows", expanded=False):
                 st.dataframe(raw_real.head(25), use_container_width=True, hide_index=True)
 
-            st.markdown('<div class="rg-section">2 • Automatic schema mapping</div>', unsafe_allow_html=True)
+            st.markdown('<div class="rg-section">2 • Schema mapping</div>', unsafe_allow_html=True)
             mapping_preview = []
             for field, meta in CANONICAL_FIELDS.items():
                 src = suggestions.get(field)
-                mapping_preview.append({
-                    "ROJ Guard field": meta["label"],
-                    "Suggested source": src or "—",
-                    "Confidence": f"{map_conf.get(field, 0)*100:.0f}%" if src else "—",
-                    "Required": "Yes" if meta["required"] else "No",
-                })
-            st.dataframe(pd.DataFrame(mapping_preview), use_container_width=True, hide_index=True, height=270)
-            st.caption("ROJ Guard uses exact synonyms first and fuzzy header matching second. Review the mapping before validation; real company column names do not need to match this prototype.")
+                if src:
+                    mapping_preview.append({
+                        "ROJ Guard field": meta["label"], "Suggested source": src,
+                        "Confidence": f"{map_conf.get(field, 0)*100:.0f}%", "Group": meta["group"],
+                    })
+            if mapping_preview:
+                st.dataframe(pd.DataFrame(mapping_preview), use_container_width=True, hide_index=True, height=260)
+            st.caption("Exact synonyms are matched first, then conservative fuzzy matching. Every source column is auto-assigned at most once.")
 
             choices = ["— Not mapped —"] + list(raw_real.columns)
             mapping_now = {}
@@ -813,7 +824,6 @@ elif page == "Real Data Lab":
             for meta in CANONICAL_FIELDS.values():
                 if meta["group"] not in groups:
                     groups.append(meta["group"])
-
             with st.expander("Review / correct column mapping", expanded=True):
                 for group in groups:
                     st.markdown(f"**{group}**")
@@ -823,126 +833,245 @@ elif page == "Real Data Lab":
                         suggested = st.session_state["real_mapping"].get(field)
                         current = suggested if suggested in raw_real.columns else "— Not mapped —"
                         idx = choices.index(current) if current in choices else 0
-                        label = CANONICAL_FIELDS[field]["label"] + (" *" if CANONICAL_FIELDS[field]["required"] else "")
                         with grid[i % 3]:
-                            selected_col = st.selectbox(label, choices, index=idx, key=f"map_{signature[:8]}_{field}")
+                            selected_col = st.selectbox(
+                                CANONICAL_FIELDS[field]["label"], choices, index=idx,
+                                key=f"map_{signature[:8]}_{field}",
+                            )
                             mapping_now[field] = None if selected_col == "— Not mapped —" else selected_col
-                    st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
 
-            validate_col, isolation_col = st.columns([.28, .72])
-            with validate_col:
+            vcol, note_col = st.columns([.28, .72])
+            with vcol:
                 validate_click = st.button("Validate & Build Dataset", type="primary", use_container_width=True)
-            with isolation_col:
-                st.markdown('<div class="rg-note" style="padding-top:9px">Validation creates an in-memory canonical dataset only. It does <b>not</b> modify the main ROJ Guard project database.</div>', unsafe_allow_html=True)
+            with note_col:
+                st.markdown('<div class="rg-note" style="padding-top:9px">Validation is in-memory only. The uploaded dataset never replaces the prepared hackathon database.</div>', unsafe_allow_html=True)
 
             if validate_click:
                 try:
                     normalized = normalize_dataset(raw_real, mapping_now)
-                    report = validate_dataset(normalized)
+                    report_obj = validate_dataset(normalized)
                     train_df, active_df = build_real_feature_frames(normalized)
                     st.session_state["real_mapping"] = mapping_now
                     st.session_state["real_normalized"] = normalized
-                    st.session_state["real_validation"] = report.as_dict()
+                    st.session_state["real_validation"] = report_obj.as_dict()
                     st.session_state["real_training_df"] = train_df
                     st.session_state["real_active_df"] = active_df
-                    st.session_state.pop("real_model_bundle", None)
-                    st.session_state.pop("real_model_metrics", None)
-                    st.session_state.pop("real_predictions", None)
+                    for key in ["real_model_bundle", "real_model_metrics", "real_predictions", "real_proc_bundle", "real_proc_metrics", "real_proc_prediction"]:
+                        st.session_state.pop(key, None)
                 except Exception as exc:
                     st.error(f"Validation failed: {exc}")
 
             report = st.session_state.get("real_validation")
+            normalized = st.session_state.get("real_normalized")
             train_df = st.session_state.get("real_training_df")
             active_df = st.session_state.get("real_active_df")
+
             if report:
-                st.markdown('<div class="rg-section">3 • Data quality gate</div>', unsafe_allow_html=True)
-                qa, qb, qc, qd, qe = st.columns(5)
-                qa.markdown(kpi_card("Quality score", f'{report["quality_score"]}%', "Key-field completeness"), unsafe_allow_html=True)
-                qb.markdown(kpi_card("Completed history", f'{report["historical_rows"]:,}', "Potential training outcomes"), unsafe_allow_html=True)
-                qc.markdown(kpi_card("Active rows", f'{report["active_rows"]:,}', "Materials to score"), unsafe_allow_html=True)
-                qd.markdown(kpi_card("Vendors", report["vendors"], "Unique suppliers"), unsafe_allow_html=True)
-                qe.markdown(kpi_card("Missed ROJ history", report["missed_roj_rows"], f'vs {report["on_time_rows"]} on-time'), unsafe_allow_html=True)
+                mode = report.get("mode", "generic")
+                if mode == "procurement_history":
+                    st.markdown('<div class="rg-section">3 • Historical Procurement Mode</div>', unsafe_allow_html=True)
+                    st.success("Procurement history detected. ROJ dates are not present, so ROJ Guard will learn real order-to-delivery behavior first and will request an ROJ only when you create a prediction scenario.")
+                    qa, qb, qc, qd, qe = st.columns(5)
+                    qa.markdown(kpi_card("Quality", f'{report["quality_score"]}%', "Core procurement fields"), unsafe_allow_html=True)
+                    qb.markdown(kpi_card("Clean delivered", f'{report["clean_delivered_rows"]:,}', "Eligible real outcomes"), unsafe_allow_html=True)
+                    qc.markdown(kpi_card("Suppliers", report["vendors"], "Supplier population"), unsafe_allow_html=True)
+                    qd.markdown(kpi_card("Categories", report["categories"], "Procurement classes"), unsafe_allow_html=True)
+                    comp = report.get("compliance_rate")
+                    qe.markdown(kpi_card("Compliance", f'{comp*100:.1f}%' if comp is not None else "—", "Observed source field"), unsafe_allow_html=True)
 
-                for err in report.get("errors", []):
-                    st.error(err)
-                for warn in report.get("warnings", []):
-                    st.warning(warn)
+                    for err in report.get("errors", []): st.error(err)
+                    for warn in report.get("warnings", []): st.warning(warn)
 
-                if not report.get("errors"):
-                    st.markdown('<div class="rg-section">4 • Choose model provenance</div>', unsafe_allow_html=True)
-                    mode = st.radio(
-                        "Inference mode",
-                        ["Prototype model + real project data", "Retrain on supplied historical data"],
-                        horizontal=True,
-                        key="real_inference_mode",
-                    )
+                    # Data-quality evidence and order-state composition.
+                    left_q, right_q = st.columns([.46, .54])
+                    with left_q:
+                        st.markdown('<div class="rg-card"><div class="rg-panel-title">Data cleaning trace</div><div class="rg-panel-sub">What is and is not allowed into supervised lead-time training</div>', unsafe_allow_html=True)
+                        clean_rows = report.get("clean_delivered_rows", 0)
+                        st.markdown(f"**{clean_rows:,}** rows pass: `Delivered` + valid Order Date + valid Delivery Date + non-negative lead time.")
+                        st.markdown(f"- Delivered status rows: **{report.get('delivered_rows', 0):,}**")
+                        st.markdown(f"- Missing Delivery Date: **{report.get('missing_delivery_dates', 0):,}**")
+                        st.markdown(f"- Invalid order→delivery sequence: **{report.get('invalid_order_delivery_rows', 0):,}**")
+                        st.markdown("- Cancelled / pending / partial rows remain available for supplier KPIs but are **not** used as completed lead-time targets.")
+                        st.markdown('</div>', unsafe_allow_html=True)
+                    with right_q:
+                        status_chart = pd.DataFrame({"Orders": [
+                            report.get("delivered_rows", 0), report.get("pending_rows", 0),
+                            report.get("partial_rows", 0), report.get("cancelled_rows", 0),
+                        ]}, index=["Delivered", "Pending/open", "Partially delivered", "Cancelled"])
+                        st.markdown('<div class="rg-panel-title">Order-state composition</div><div class="rg-panel-sub">Source status distribution</div>', unsafe_allow_html=True)
+                        st.bar_chart(status_chart, height=250)
 
-                    if mode == "Prototype model + real project data":
-                        st.markdown('<div class="rg-card"><div class="rg-eyebrow">Immediate inference</div><div style="font-size:1rem;color:white;font-weight:800;margin:6px 0">Use the existing hackathon model, but calculate live features from this uploaded dataset.</div><div class="rg-note">This demonstrates integration on real project data. It does not claim production accuracy because the statistical model was trained on the prototype history.</div></div>', unsafe_allow_html=True)
-                    else:
-                        st.markdown('<div class="rg-card"><div class="rg-eyebrow">Isolated real-history retraining</div><div style="font-size:1rem;color:white;font-weight:800;margin:6px 0">Train a new XGBoost lead-time regressor + miss-ROJ classifier in this browser session.</div><div class="rg-note">The lab uses a temporal 80/20 holdout and never overwrites the baseline joblib models. Historical rows need shipped date, actual delivery date and ROJ outcome.</div></div>', unsafe_allow_html=True)
-                        train_click = st.button("Train Real-Data Model", type="primary", disabled=(train_df is None or len(train_df) < 50), use_container_width=True)
-                        if train_click:
-                            with st.spinner("Building leakage-reduced historical features → temporal holdout → training XGBoost models..."):
-                                trained = train_real_data_models(train_df)
-                            st.session_state["real_train_status"] = trained.get("status")
-                            if trained.get("status") == "trained":
-                                st.session_state["real_model_bundle"] = trained.pop("bundle")
-                                st.session_state["real_model_metrics"] = trained
-                                st.session_state.pop("real_predictions", None)
+                    st.markdown('<div class="rg-section">4 • Supplier intelligence</div>', unsafe_allow_html=True)
+                    supplier_kpis = build_supplier_intelligence(normalized)
+                    category_kpis = build_category_intelligence(normalized)
+                    if not supplier_kpis.empty:
+                        sleft, sright = st.columns([1.18, .82])
+                        with sleft:
+                            table = supplier_kpis.copy()
+                            for col in ["Completion rate", "Compliance rate", "Defect rate", "Weighted savings rate"]:
+                                table[col] = (table[col] * 100).round(1).astype(str) + "%"
+                            for col in ["Avg lead time days", "Median lead time days", "P90 lead time days", "Supplier health score"]:
+                                table[col] = pd.to_numeric(table[col], errors="coerce").round(1)
+                            show_cols = ["Supplier", "Orders", "Clean delivered", "Completion rate", "Compliance rate", "Defect rate", "Weighted savings rate", "Avg lead time days", "P90 lead time days", "Supplier health score"]
+                            st.dataframe(table[show_cols], use_container_width=True, hide_index=True, height=300)
+                        with sright:
+                            lead_chart = supplier_kpis.set_index("Supplier")[["Avg lead time days", "P90 lead time days"]].copy()
+                            st.markdown('<div class="rg-panel-title">Supplier lead-time profile</div><div class="rg-panel-sub">Observed clean Delivered history</div>', unsafe_allow_html=True)
+                            st.bar_chart(lead_chart, height=300)
+                        dl1, dl2 = st.columns(2)
+                        dl1.download_button("Download supplier KPI CSV", supplier_kpis.to_csv(index=False).encode("utf-8"), "roj_guard_supplier_intelligence.csv", "text/csv", use_container_width=True)
+                        if not category_kpis.empty:
+                            dl2.download_button("Download category lead-time CSV", category_kpis.to_csv(index=False).encode("utf-8"), "roj_guard_category_lead_times.csv", "text/csv", use_container_width=True)
+
+                    st.markdown('<div class="rg-section">5 • Train real procurement lead-time model</div>', unsafe_allow_html=True)
+                    st.markdown("""<div class="rg-card"><div class="rg-eyebrow">Real supervised target</div><div style="font-size:.98rem;color:white;font-weight:820;margin:6px 0">Order Date → Actual Delivery Date</div><div class="rg-note">Only clean Delivered rows create the target. The model uses supplier/category/commercial context plus prior supplier history. A temporal 80/20 holdout is used; no historical ROJ classifier is fabricated.</div></div>""", unsafe_allow_html=True)
+                    if st.button("Train Lead-Time Model on Real Data", type="primary", use_container_width=True, disabled=report.get("clean_delivered_rows", 0) < 50):
+                        with st.spinner("Building leakage-reduced supplier history → temporal holdout → training XGBoost lead-time model..."):
+                            trained = train_procurement_lead_time_model(normalized)
+                        if trained.get("status") == "trained":
+                            st.session_state["real_proc_bundle"] = trained.pop("bundle")
+                            st.session_state["real_proc_metrics"] = trained
+                            st.session_state.pop("real_proc_prediction", None)
+                        else:
+                            st.session_state.pop("real_proc_bundle", None)
+                            st.session_state["real_proc_metrics"] = trained
+
+                    pm = st.session_state.get("real_proc_metrics")
+                    if pm:
+                        if pm.get("status") == "trained":
+                            m1, m2, m3, m4, m5 = st.columns(5)
+                            m1.markdown(kpi_card("Rows used", pm["rows_used"], pm.get("model_grade", "history")), unsafe_allow_html=True)
+                            m2.markdown(kpi_card("Holdout", pm["holdout_rows"], "Temporal 20%"), unsafe_allow_html=True)
+                            m3.markdown(kpi_card("Model MAE", f'{pm["lead_time_mae_days"]:.2f}d', "Real holdout"), unsafe_allow_html=True)
+                            m4.markdown(kpi_card("Baseline MAE", f'{pm["baseline_mae_days"]:.2f}d', "Training-mean baseline"), unsafe_allow_html=True)
+                            lift = pm.get("model_lift_vs_baseline_pct", 0)
+                            m5.markdown(kpi_card("Model lift", f'{lift:+.1f}%', "vs naive baseline"), unsafe_allow_html=True)
+                            st.caption(f'Median absolute error {pm["median_abs_error_days"]:.2f}d • RMSE {pm["rmse_days"]:.2f}d • R² {pm["r2"] if pm.get("r2") is not None else "N/A"}. These are holdout statistics from the uploaded dataset, not production claims.')
+                            if lift < 5:
+                                st.info("This dataset has limited predictive signal beyond the overall historical lead-time level. ROJ Guard reports that instead of overstating model quality; supplier KPIs and forecast uncertainty remain usable for scenario analysis.")
+                        else:
+                            st.warning(pm.get("note", "Could not train the procurement model."))
+
+                    bundle = st.session_state.get("real_proc_bundle")
+                    if bundle:
+                        st.markdown('<div class="rg-section">6 • Predict a new procurement against a real ROJ</div>', unsafe_allow_html=True)
+                        suppliers = list(bundle["supplier_kpis"]["Supplier"].astype(str)) if not bundle["supplier_kpis"].empty else sorted(normalized["vendor_name"].dropna().astype(str).unique())
+                        categories = sorted(normalized["material_class"].dropna().astype(str).unique())
+                        q_default = float(pd.to_numeric(normalized["quantity"], errors="coerce").replace(0, pd.NA).dropna().median() or 1)
+                        up_default = float(pd.to_numeric(normalized["unit_price"], errors="coerce").replace(0, pd.NA).dropna().median() or 1)
+                        np_default = float(pd.to_numeric(normalized["negotiated_price"], errors="coerce").replace(0, pd.NA).dropna().median() or up_default)
+
+                        with st.form("procurement_scenario_form", clear_on_submit=False):
+                            r1a, r1b, r1c = st.columns(3)
+                            supplier = r1a.selectbox("Supplier", suppliers)
+                            material_class = r1b.selectbox("Item / material category", categories)
+                            quantity = r1c.number_input("Quantity", min_value=0.0, value=max(1.0, q_default), step=1.0)
+                            r2a, r2b, r2c = st.columns(3)
+                            unit_price = r2a.number_input("Unit price", min_value=0.0, value=max(0.01, up_default), step=1.0)
+                            negotiated_price = r2b.number_input("Negotiated price", min_value=0.0, value=max(0.01, np_default), step=1.0)
+                            float_days = r2c.number_input("Schedule float (days)", min_value=0.0, value=0.0, step=1.0)
+                            r3a, r3b, r3c = st.columns(3)
+                            order_dt = r3a.date_input("New PO / order date", value=date.today())
+                            roj_dt = r3b.date_input("Required-On-Job (ROJ) date", value=date.today() + timedelta(days=30))
+                            critical = r3c.checkbox("Critical-path material", value=False)
+                            submit_scenario = st.form_submit_button("Predict ROJ Risk", type="primary", use_container_width=True)
+
+                        if submit_scenario:
+                            if roj_dt <= order_dt:
+                                st.error("ROJ date must be after the order date.")
                             else:
-                                st.session_state.pop("real_model_bundle", None)
-                                st.session_state["real_model_metrics"] = trained
+                                scenario = dict(
+                                    supplier=supplier, material_class=material_class, quantity=quantity,
+                                    unit_price=unit_price, negotiated_price=negotiated_price,
+                                    order_date=order_dt, roj_date=roj_dt, float_days=float_days,
+                                    is_critical_path=critical,
+                                )
+                                pred = predict_procurement_scenario(bundle, **scenario)
+                                st.session_state["real_proc_prediction"] = pred
+                                st.session_state["real_proc_scenario"] = scenario
 
-                        metrics = st.session_state.get("real_model_metrics")
-                        if metrics:
-                            if metrics.get("status") == "trained":
-                                ma, mb, mc, md, me = st.columns(5)
-                                ma.markdown(kpi_card("Rows used", metrics["rows_used"], metrics.get("model_grade", "real history")), unsafe_allow_html=True)
-                                mb.markdown(kpi_card("Holdout", metrics["holdout_rows"], "Temporal validation"), unsafe_allow_html=True)
-                                mc.markdown(kpi_card("Lead-time MAE", f'{metrics["lead_time_mae_days"]:.2f}d', "Lower is better"), unsafe_allow_html=True)
-                                auc_label = f'{metrics["risk_auc"]:.3f}' if metrics.get("risk_auc") is not None else "N/A"
-                                md.markdown(kpi_card("Risk AUC", auc_label, "Temporal holdout"), unsafe_allow_html=True)
-                                me.markdown(kpi_card("Recall", f'{metrics["recall"]*100:.0f}%', "Late-material detection"), unsafe_allow_html=True)
-                                st.caption(f'Precision {metrics["precision"]:.3f} • F1 {metrics["f1"]:.3f} • historical miss rate {metrics["historical_miss_rate"]*100:.1f}%. These metrics describe only the supplied holdout dataset.')
-                            else:
-                                st.warning(metrics.get("note", "Real-data retraining could not be completed."))
+                        pred = st.session_state.get("real_proc_prediction")
+                        if pred:
+                            risk = pred["Risk"]
+                            risk_class = "rg-high" if risk == "High" else ("rg-medium" if risk == "Medium" else "rg-low")
+                            st.markdown(f"""<div class="rg-card"><div class="rg-eyebrow">Real-data scenario assessment</div><div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-top:7px"><div><div style="font-size:1.34rem;font-weight:860;color:#fff">{pred["Supplier"]} • {pred["Category"]}</div><div class="rg-note">Real procurement lead-time model + supplied project ROJ</div></div><span class="rg-chip {risk_class}" style="font-size:.88rem;padding:7px 12px">{risk.upper()} • {pred["Miss ROJ probability"]*100:.1f}%</span></div></div>""", unsafe_allow_html=True)
+                            c1, c2, c3, c4, c5 = st.columns(5)
+                            c1.markdown(kpi_card("Predicted lead", f'{pred["Predicted lead time days"]:.1f}d', "Order → delivery"), unsafe_allow_html=True)
+                            c2.markdown(kpi_card("Forecast arrival", pred["Forecast arrival"], "Model forecast"), unsafe_allow_html=True)
+                            c3.markdown(kpi_card("ROJ", pred["ROJ date"], "Required on job"), unsafe_allow_html=True)
+                            c4.markdown(kpi_card("Forecast margin", f'{pred["Forecast margin days"]:+d}d', "Positive = before ROJ"), unsafe_allow_html=True)
+                            c5.markdown(kpi_card("Supplier health", f'{pred["Supplier health score"]:.0f}/100', "Composite observed KPI"), unsafe_allow_html=True)
+                            st.caption(f'Statistical P(miss ROJ) {pred["Statistical miss probability"]*100:.1f}% • estimated schedule-impact probability {pred["Schedule impact probability"]*100:.1f}% • forecast uncertainty σ≈{pred["Uncertainty sigma days"]:.1f}d.')
+                            st.markdown('<div class="rg-section">Why this scenario received that risk</div>', unsafe_allow_html=True)
+                            for d in pred["Drivers"]:
+                                st.markdown(f'<div class="rg-driver"><b>{d}</b></div>', unsafe_allow_html=True)
 
-                    st.markdown('<div class="rg-section">5 • Predict active materials</div>', unsafe_allow_html=True)
-                    can_score = active_df is not None and not active_df.empty
-                    if mode == "Retrain on supplied historical data":
-                        can_score = can_score and bool(st.session_state.get("real_model_bundle"))
-                    if st.button("Score Active Materials", type="primary", use_container_width=True, disabled=not can_score):
-                        with st.spinner("Building current operational features → forecasting lead time → computing miss-ROJ probability..."):
-                            if mode == "Retrain on supplied historical data":
-                                preds = score_with_real_model(active_df, st.session_state["real_model_bundle"])
-                            else:
-                                preds = score_with_prototype_model(active_df)
-                        st.session_state["real_predictions"] = preds
+                            st.markdown('<div class="rg-section">Supplier what-if comparison</div>', unsafe_allow_html=True)
+                            compare = compare_supplier_scenarios(bundle, **st.session_state["real_proc_scenario"])
+                            st.dataframe(compare, use_container_width=True, hide_index=True)
+                            st.caption("This is a model-based scenario comparison using identical quantity, commercial terms, order date and ROJ; it is not an RFQ or a claim that every supplier can supply every category. Capability qualification remains a human procurement gate.")
+                            st.download_button("Download scenario comparison CSV", compare.to_csv(index=False).encode("utf-8"), "roj_guard_supplier_scenario_comparison.csv", "text/csv", use_container_width=True)
 
-                    predictions = st.session_state.get("real_predictions")
-                    if isinstance(predictions, pd.DataFrame) and not predictions.empty:
-                        counts = Counter(predictions["Risk"])
-                        st.markdown('<div class="rg-section">Real-data prediction output</div>', unsafe_allow_html=True)
-                        pa, pb, pc, pdx = st.columns(4)
-                        pa.markdown(kpi_card("Scored", len(predictions), "Active procurement lines"), unsafe_allow_html=True)
-                        pb.markdown(kpi_card("High risk", counts.get("High", 0), "Immediate attention"), unsafe_allow_html=True)
-                        pc.markdown(kpi_card("Medium risk", counts.get("Medium", 0), "Watch / mitigate"), unsafe_allow_html=True)
-                        pdx.markdown(kpi_card("Low risk", counts.get("Low", 0), "Currently protected"), unsafe_allow_html=True)
+                elif mode == "roj_project":
+                    st.markdown('<div class="rg-section">3 • Project ROJ data quality gate</div>', unsafe_allow_html=True)
+                    qa, qb, qc, qd, qe = st.columns(5)
+                    qa.markdown(kpi_card("Quality", f'{report["quality_score"]}%', "Key-field completeness"), unsafe_allow_html=True)
+                    qb.markdown(kpi_card("Completed history", f'{report["historical_rows"]:,}', "Potential training outcomes"), unsafe_allow_html=True)
+                    qc.markdown(kpi_card("Active rows", f'{report["active_rows"]:,}', "Materials to score"), unsafe_allow_html=True)
+                    qd.markdown(kpi_card("Vendors", report["vendors"], "Unique suppliers"), unsafe_allow_html=True)
+                    qe.markdown(kpi_card("Missed ROJ history", report["missed_roj_rows"], f'vs {report["on_time_rows"]} on-time'), unsafe_allow_html=True)
+                    for err in report.get("errors", []): st.error(err)
+                    for warn in report.get("warnings", []): st.warning(warn)
 
-                        display = predictions.copy()
-                        display["Risk %"] = (display["Miss ROJ probability"] * 100).round(1).astype(str) + "%"
-                        cols_show = ["Material", "PO", "Vendor", "Risk", "Risk %", "Forecast arrival", "ROJ date", "Forecast delay days", "Critical path", "Model source", "Why"]
-                        st.dataframe(display[cols_show], use_container_width=True, hide_index=True, height=430)
+                    if not report.get("errors"):
+                        st.markdown('<div class="rg-section">4 • Choose model provenance</div>', unsafe_allow_html=True)
+                        roj_mode = st.radio("Inference mode", ["Prototype model + real project data", "Retrain on supplied historical data"], horizontal=True, key="real_inference_mode")
+                        if roj_mode == "Retrain on supplied historical data":
+                            if st.button("Train Real-Data ROJ Model", type="primary", disabled=(train_df is None or len(train_df) < 50), use_container_width=True):
+                                with st.spinner("Temporal holdout → training lead-time + miss-ROJ models..."):
+                                    trained = train_real_data_models(train_df)
+                                if trained.get("status") == "trained":
+                                    st.session_state["real_model_bundle"] = trained.pop("bundle")
+                                    st.session_state["real_model_metrics"] = trained
+                                else:
+                                    st.session_state["real_model_metrics"] = trained
+                            metrics = st.session_state.get("real_model_metrics")
+                            if metrics:
+                                if metrics.get("status") == "trained":
+                                    ma, mb, mc, md, me = st.columns(5)
+                                    ma.markdown(kpi_card("Rows used", metrics["rows_used"], metrics.get("model_grade", "real history")), unsafe_allow_html=True)
+                                    mb.markdown(kpi_card("Holdout", metrics["holdout_rows"], "Temporal validation"), unsafe_allow_html=True)
+                                    mc.markdown(kpi_card("Lead-time MAE", f'{metrics["lead_time_mae_days"]:.2f}d', "Lower is better"), unsafe_allow_html=True)
+                                    md.markdown(kpi_card("Risk AUC", f'{metrics["risk_auc"]:.3f}' if metrics.get("risk_auc") is not None else "N/A", "Temporal holdout"), unsafe_allow_html=True)
+                                    me.markdown(kpi_card("Recall", f'{metrics["recall"]*100:.0f}%', "Late-material detection"), unsafe_allow_html=True)
+                                else:
+                                    st.warning(metrics.get("note", "Real-data retraining could not be completed."))
+                        else:
+                            st.info("Uses the existing prototype statistical model with live features derived from the uploaded real project data. Model provenance remains explicitly labeled.")
 
-                        st.download_button(
-                            "Download prediction results CSV",
-                            data=predictions.to_csv(index=False).encode("utf-8"),
-                            file_name="roj_guard_real_data_predictions.csv",
-                            mime="text/csv",
-                            use_container_width=True,
-                        )
-                        st.caption("Prediction rows retain the original source-row number for traceability. No uploaded data is written into the main hackathon demo database by this workflow.")
+                        st.markdown('<div class="rg-section">5 • Score active materials</div>', unsafe_allow_html=True)
+                        can_score = active_df is not None and not active_df.empty
+                        if roj_mode == "Retrain on supplied historical data":
+                            can_score = can_score and bool(st.session_state.get("real_model_bundle"))
+                        if st.button("Score Active Materials", type="primary", use_container_width=True, disabled=not can_score):
+                            with st.spinner("Forecasting lead time → computing miss-ROJ risk..."):
+                                preds = score_with_real_model(active_df, st.session_state["real_model_bundle"]) if roj_mode == "Retrain on supplied historical data" else score_with_prototype_model(active_df)
+                            st.session_state["real_predictions"] = preds
+                        predictions = st.session_state.get("real_predictions")
+                        if isinstance(predictions, pd.DataFrame) and not predictions.empty:
+                            counts = Counter(predictions["Risk"])
+                            pa, pb, pc, pdx = st.columns(4)
+                            pa.markdown(kpi_card("Scored", len(predictions), "Active procurement lines"), unsafe_allow_html=True)
+                            pb.markdown(kpi_card("High", counts.get("High", 0), "Immediate attention"), unsafe_allow_html=True)
+                            pc.markdown(kpi_card("Medium", counts.get("Medium", 0), "Watch / mitigate"), unsafe_allow_html=True)
+                            pdx.markdown(kpi_card("Low", counts.get("Low", 0), "Currently protected"), unsafe_allow_html=True)
+                            display = predictions.copy(); display["Risk %"] = (display["Miss ROJ probability"] * 100).round(1).astype(str) + "%"
+                            cols_show = ["Material", "PO", "Vendor", "Risk", "Risk %", "Forecast arrival", "ROJ date", "Forecast delay days", "Critical path", "Model source", "Why"]
+                            st.dataframe(display[cols_show], use_container_width=True, hide_index=True, height=430)
+                            st.download_button("Download prediction results CSV", predictions.to_csv(index=False).encode("utf-8"), "roj_guard_real_data_predictions.csv", "text/csv", use_container_width=True)
+                else:
+                    for err in report.get("errors", []): st.error(err)
+                    for warn in report.get("warnings", []): st.warning(warn)
 
 # ---------------------------------------------------------------------------
 # MATERIAL INTELLIGENCE
