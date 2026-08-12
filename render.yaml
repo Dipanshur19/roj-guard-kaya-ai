@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: roj-guard-round2
+    runtime: docker
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: BACKEND_URL
+        value: http://127.0.0.1:8000
+      - key: APP_TIMEZONE
+        value: Asia/Kolkata
+      - key: DEMO_EMAIL_MODE
+        value: outbox
+      - key: STARTUP_SEED
+        value: "true"
+      - key: GEMINI_API_KEY
+        sync: false

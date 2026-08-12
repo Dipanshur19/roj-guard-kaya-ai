@@ -1,0 +1,14 @@
+.env
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.streamlit/secrets.toml
+uploaded_docs/*
+!uploaded_docs/.gitkeep
+demo_outbox/*
+!demo_outbox/.gitkeep
+demo_executions/*
+!demo_executions/.gitkeep
+.DS_Store
