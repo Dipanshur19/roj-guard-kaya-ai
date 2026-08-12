@@ -11,6 +11,7 @@ import json
 import os
 import re
 import hashlib
+import html as html_lib
 from collections import Counter
 from datetime import date, timedelta
 
@@ -241,6 +242,35 @@ div[data-testid="stRadio"] [role="radiogroup"] label{flex:1 1 auto!important;min
 @media(max-width:1180px){.rg-dashboard-grid{grid-template-columns:1fr 1fr}.rg-dashboard-panel:last-child{grid-column:1/-1}.rg-status-wrap .rg-control-pill{display:none!important}}
 @media(max-width:760px){.block-container{padding-left:.65rem!important;padding-right:.65rem!important}.rg-topbar{top:6px!important;border-radius:18px!important}.rg-topbar .rg-trust{display:none!important}div[data-testid="stRadio"]{top:65px!important;margin-bottom:10px!important}div[data-testid="stRadio"] [role="radiogroup"]{min-width:980px!important;justify-content:flex-start!important}.rg-dashboard-grid{grid-template-columns:1fr}.rg-dashboard-panel:last-child{grid-column:auto}.rg-dashboard-panel{min-height:0}.rg-compact-stat-row{grid-template-columns:1fr 1fr}.rg-dashboard-title{font-size:1.38rem}.rg-dashboard-meta{display:none}.rg-title{font-size:1.42rem!important}}
 
+
+/* ==========================================================================\n   PEAK FINAL UX — visual-first, less text, fast judge scan\n   ========================================================================== */
+@keyframes rgTopFloat{0%,100%{box-shadow:0 24px 70px rgba(0,0,0,.34),0 10px 35px rgba(56,189,248,.055),inset 0 1px 0 rgba(255,255,255,.07)}50%{box-shadow:0 30px 85px rgba(0,0,0,.40),0 13px 44px rgba(56,189,248,.075),inset 0 1px 0 rgba(255,255,255,.08)}}
+@keyframes rgOrbit{to{transform:rotate(360deg)}}
+@keyframes rgOrbitReverse{to{transform:rotate(-360deg)}}
+@keyframes rgScan{0%{transform:translateX(-130%)}100%{transform:translateX(460%)}}
+@keyframes rgNodePulse{0%,100%{opacity:.45;transform:scale(.92)}50%{opacity:1;transform:scale(1.12)}}
+.rg-topbar{animation:rgTopFloat 7s ease-in-out infinite!important;transform:translateZ(0)}
+.rg-topbar .rg-control-pill{background:rgba(11,26,46,.48)!important;border-color:rgba(155,205,244,.10)!important}
+.rg-page-intro{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(240px,.65fr);align-items:center;gap:18px;min-height:156px;margin:5px 0 14px;padding:20px 22px;border:1px solid rgba(170,215,248,.11);border-radius:22px;background:linear-gradient(135deg,rgba(10,25,45,.72),rgba(5,14,27,.58));box-shadow:0 24px 70px rgba(0,0,0,.24),inset 0 1px 0 rgba(255,255,255,.05);backdrop-filter:blur(26px) saturate(145%);position:relative;overflow:hidden}
+.rg-page-intro:before{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(circle at 83% 18%,rgba(65,198,255,.12),transparent 24%),radial-gradient(circle at 94% 88%,rgba(245,158,11,.08),transparent 22%)}
+.rg-page-intro:after{content:"";position:absolute;top:0;left:-28%;height:1px;width:32%;background:linear-gradient(90deg,transparent,#5ed7ff,transparent);animation:rgScan 9s linear infinite;opacity:.62}
+.rg-page-kicker{position:relative;z-index:2;font-size:.61rem;letter-spacing:.15em;text-transform:uppercase;color:#6edcff;font-weight:800}.rg-page-intro h2{position:relative;z-index:2;font-size:clamp(1.45rem,2.25vw,2.15rem);line-height:1.08;letter-spacing:-.045em;color:#f7fbff;margin:7px 0 7px}.rg-page-intro p{position:relative;z-index:2;max-width:800px;color:#8397ad;font-size:.82rem;line-height:1.54;margin:0}.rg-page-mini{position:relative;z-index:2;display:flex;gap:7px;flex-wrap:wrap;margin-top:13px}.rg-page-mini span{padding:5px 8px;border-radius:999px;border:1px solid rgba(152,203,240,.11);background:rgba(6,18,34,.46);color:#8eabc2;font-size:.62rem}.rg-page-visual{position:relative;z-index:2;display:grid;place-items:center;min-height:118px}.rg-orbit{position:relative;width:138px;height:138px;border-radius:50%;border:1px solid rgba(79,201,255,.18);box-shadow:inset 0 0 48px rgba(56,189,248,.035),0 0 55px rgba(56,189,248,.05)}.rg-orbit:before,.rg-orbit:after{content:"";position:absolute;inset:17px;border-radius:50%;border:1px dashed rgba(125,117,255,.24);animation:rgOrbit 13s linear infinite}.rg-orbit:after{inset:35px;border-style:solid;border-color:rgba(245,158,11,.18);animation:rgOrbitReverse 9s linear infinite}.rg-orbit-core{position:absolute;left:50%;top:50%;width:32px;height:32px;transform:translate(-50%,-50%);border-radius:11px;background:linear-gradient(135deg,#42c8ff,#7c63ff 58%,#ffb648);box-shadow:0 0 0 10px rgba(74,194,255,.035),0 0 38px rgba(75,199,255,.30)}.rg-orbit-dot{position:absolute;width:7px;height:7px;border-radius:50%;background:#66dcff;box-shadow:0 0 15px rgba(102,220,255,.75);animation:rgNodePulse 2.4s ease-in-out infinite}.rg-orbit-dot.d1{left:9px;top:63px}.rg-orbit-dot.d2{right:19px;top:21px;animation-delay:.5s;background:#ffb84e}.rg-orbit-dot.d3{right:1px;bottom:32px;animation-delay:1s;background:#8a79ff}.rg-orbit-dot.d4{left:33px;bottom:7px;animation-delay:1.5s;background:#42d899}
+.rg-process{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:8px 0 16px}.rg-process-step{position:relative;padding:11px 12px;border-radius:13px;border:1px solid rgba(157,205,242,.085);background:linear-gradient(145deg,rgba(12,27,47,.54),rgba(6,16,30,.44));overflow:hidden}.rg-process-step:after{content:"";position:absolute;right:-8px;top:50%;width:15px;height:1px;background:rgba(102,194,241,.28)}.rg-process-step:last-child:after{display:none}.rg-process-no{font-size:.58rem;letter-spacing:.11em;color:#5d7690;text-transform:uppercase}.rg-process-label{font-size:.73rem;color:#d9e9f7;font-weight:730;margin-top:4px}.rg-process-detail{font-size:.60rem;color:#5f748c;margin-top:2px}.rg-process-step.active{border-color:rgba(79,204,255,.24);background:linear-gradient(145deg,rgba(34,92,128,.23),rgba(11,27,46,.52));box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+.rg-field-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:8px 0 12px}.rg-field{padding:10px 11px;border-radius:12px;border:1px solid rgba(157,205,242,.085);background:rgba(7,18,33,.42);min-width:0}.rg-field-k{font-size:.57rem;text-transform:uppercase;letter-spacing:.08em;color:#5f7690}.rg-field-v{font-size:.76rem;color:#e2eef8;font-weight:680;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rg-field-v.wrap{white-space:normal;line-height:1.35}
+.rg-status-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.rg-status-tile{padding:11px;border-radius:12px;border:1px solid rgba(157,205,242,.085);background:rgba(7,18,33,.42)}.rg-status-tile span{display:block;font-size:.57rem;text-transform:uppercase;letter-spacing:.075em;color:#5d748d}.rg-status-tile b{display:block;font-size:.75rem;color:#e7f0f8;margin-top:4px;font-weight:690;line-height:1.3}
+.rg-mapping-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:9px 0 12px}.rg-map-card{display:grid;grid-template-columns:minmax(0,1fr) 14px minmax(0,1fr);gap:7px;align-items:center;padding:9px 10px;border-radius:11px;border:1px solid rgba(157,205,242,.08);background:rgba(7,18,33,.40)}.rg-map-src{font-size:.68rem;color:#dce9f5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rg-map-arrow{color:#4cc9ff;font-size:.72rem;text-align:center}.rg-map-dst{font-size:.63rem;color:#7590a9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rg-map-card.unmapped{opacity:.5}
+.rg-quality{display:grid;grid-template-columns:150px 1fr;gap:18px;align-items:center;padding:16px 17px;border-radius:18px;border:1px solid rgba(157,205,242,.09);background:linear-gradient(145deg,rgba(12,28,48,.55),rgba(6,16,30,.45));margin:8px 0 12px}.rg-quality-ring{width:124px;height:124px;border-radius:50%;display:grid;place-items:center;position:relative}.rg-quality-ring:after{content:"";position:absolute;inset:11px;border-radius:50%;background:#091523;border:1px solid rgba(255,255,255,.04)}.rg-quality-ring div{position:relative;z-index:2;text-align:center}.rg-quality-ring b{display:block;font-size:1.55rem;color:#f6fbff}.rg-quality-ring span{font-size:.58rem;color:#647b92;text-transform:uppercase;letter-spacing:.08em}.rg-quality-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.rg-quality-stat{padding:10px;border-radius:11px;background:rgba(5,15,28,.40);border:1px solid rgba(255,255,255,.05)}.rg-quality-stat span{display:block;font-size:.56rem;color:#61778e;text-transform:uppercase;letter-spacing:.07em}.rg-quality-stat b{display:block;font-size:.96rem;color:#edf6ff;margin-top:4px}
+.rg-supplier-cards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:8px 0 11px}.rg-supplier-card{padding:11px;border-radius:13px;border:1px solid rgba(157,205,242,.085);background:linear-gradient(145deg,rgba(12,27,47,.54),rgba(6,16,30,.44));min-width:0}.rg-supplier-name{font-size:.69rem;color:#e5f0f9;font-weight:720;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rg-supplier-score{font-size:1.25rem;color:#fff;font-weight:860;margin-top:5px}.rg-supplier-score small{font-size:.58rem;color:#667c93;font-weight:600}.rg-supplier-meter{height:4px;border-radius:99px;background:rgba(255,255,255,.06);overflow:hidden;margin:7px 0}.rg-supplier-meter span{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#43c8ff,#54dc9d,#ffb549)}.rg-supplier-meta{font-size:.58rem;color:#647b92;line-height:1.45}
+.rg-demo-stage{display:grid;grid-template-columns:1fr 36px 1fr 36px 1fr;gap:7px;align-items:stretch;margin:9px 0 14px}.rg-demo-card{padding:14px;border-radius:15px;border:1px solid rgba(157,205,242,.09);background:rgba(7,18,33,.48);display:flex;flex-direction:column;justify-content:center;min-height:105px}.rg-demo-card .tag{font-size:.57rem;text-transform:uppercase;letter-spacing:.09em;color:#657c93}.rg-demo-card .value{font-size:1.28rem;color:#f6fbff;font-weight:850;margin-top:5px}.rg-demo-card .sub{font-size:.65rem;color:#667d94;margin-top:3px}.rg-demo-arrow{display:grid;place-items:center;color:#4cc9ff;font-size:1.15rem}.rg-demo-card.signal{border-color:rgba(245,158,11,.18);background:rgba(82,54,10,.12)}
+.rg-approval-flow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:8px 0 14px}.rg-approval-step{padding:12px;border-radius:13px;border:1px solid rgba(157,205,242,.085);background:rgba(7,18,33,.44);position:relative}.rg-approval-step:after{content:"→";position:absolute;right:-9px;top:50%;transform:translateY(-50%);color:#52718d}.rg-approval-step:last-child:after{display:none}.rg-approval-step span{display:block;font-size:.56rem;letter-spacing:.08em;text-transform:uppercase;color:#61788f}.rg-approval-step b{display:block;font-size:.74rem;color:#e5f0f9;margin-top:4px}
+.rg-card,.rg-kpi,.rg-dashboard-panel,.rg-page-intro,.rg-process-step,.rg-field,.rg-status-tile,.rg-map-card,.rg-supplier-card,.rg-demo-card,.rg-approval-step{transition:border-color .2s ease,transform .2s ease,background .2s ease}.rg-process-step:hover,.rg-field:hover,.rg-status-tile:hover,.rg-map-card:hover,.rg-supplier-card:hover{transform:translateY(-1px);border-color:rgba(80,202,255,.20)}
+.rg-kpi{min-height:88px!important;padding:12px 13px!important}.rg-kpi-value{font-size:1.48rem!important;margin-top:6px!important}.rg-section{margin-top:1rem!important;margin-bottom:.52rem!important}.rg-footer{margin-top:2rem!important}.rg-glass-banner{display:none!important}
+[data-testid="stFileUploader"]{border:1px dashed rgba(97,193,239,.18);border-radius:15px;padding:4px 7px;background:rgba(8,19,34,.32)}[data-testid="stFileUploader"] section{background:transparent!important}
+[data-testid="stAlert"]{border-radius:13px!important;border-color:rgba(157,205,242,.10)!important;background:rgba(9,21,37,.72)!important}
+@media(max-width:1100px){.rg-page-intro{grid-template-columns:1fr 220px}.rg-field-grid,.rg-mapping-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.rg-supplier-cards{grid-template-columns:repeat(3,minmax(0,1fr))}.rg-quality-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){.rg-page-intro{grid-template-columns:1fr;padding:16px}.rg-page-visual{display:none}.rg-process{grid-template-columns:1fr 1fr}.rg-process-step:after{display:none}.rg-field-grid,.rg-mapping-grid{grid-template-columns:1fr}.rg-quality{grid-template-columns:1fr}.rg-quality-ring{margin:auto}.rg-quality-stats{grid-template-columns:1fr 1fr}.rg-supplier-cards{grid-template-columns:1fr 1fr}.rg-demo-stage{grid-template-columns:1fr}.rg-demo-arrow{height:20px;transform:rotate(90deg)}.rg-approval-flow{grid-template-columns:1fr 1fr}.rg-approval-step:after{display:none}}
+@media(max-width:440px){.rg-supplier-cards,.rg-quality-stats,.rg-process,.rg-approval-flow{grid-template-columns:1fr}.rg-page-intro h2{font-size:1.38rem}}
+@media(prefers-reduced-motion:reduce){.rg-topbar,.rg-page-intro:after,.rg-orbit:before,.rg-orbit:after,.rg-orbit-dot{animation:none!important}}
 </style>
 """,
     unsafe_allow_html=True,
@@ -324,11 +354,105 @@ def api_extract(doc_type, project_id, raw_text=None, uploaded_file=None):
         return None
 
 
+def esc(value):
+    return html_lib.escape("—" if value is None else str(value))
+
+
 def header(eyebrow, title, subtitle):
+    # Kept for empty/error states. Main workspaces use the visual compact intro.
     st.markdown(
-        f'<div class="rg-eyebrow">{eyebrow}</div><div class="rg-title">{title}</div><div class="rg-subtitle">{subtitle}</div>',
+        f'<div class="rg-eyebrow">{esc(eyebrow)}</div><div class="rg-title">{esc(title)}</div><div class="rg-subtitle">{esc(subtitle)}</div>',
         unsafe_allow_html=True,
     )
+
+
+def render_page_intro(kicker, title, subtitle, badges=None):
+    badges = badges or []
+    badge_html = "".join(f'<span>{esc(x)}</span>' for x in badges[:5])
+    markup = (
+        f'<div class="rg-page-intro"><div><div class="rg-page-kicker">{esc(kicker)}</div>'
+        f'<h2>{esc(title)}</h2><p>{esc(subtitle)}</p><div class="rg-page-mini">{badge_html}</div></div>'
+        '<div class="rg-page-visual"><div class="rg-orbit"><div class="rg-orbit-core"></div>'
+        '<i class="rg-orbit-dot d1"></i><i class="rg-orbit-dot d2"></i><i class="rg-orbit-dot d3"></i><i class="rg-orbit-dot d4"></i>'
+        '</div></div></div>'
+    )
+    st.markdown(markup, unsafe_allow_html=True)
+
+
+def render_process_strip(steps, active=None):
+    markup = '<div class="rg-process">'
+    for i, step in enumerate(steps):
+        label, detail = step if isinstance(step, (list, tuple)) else (str(step), "")
+        cls = ' active' if active is not None and i == active else ''
+        markup += f'<div class="rg-process-step{cls}"><div class="rg-process-no">0{i+1}</div><div class="rg-process-label">{esc(label)}</div><div class="rg-process-detail">{esc(detail)}</div></div>'
+    markup += '</div>'
+    st.markdown(markup, unsafe_allow_html=True)
+
+
+def render_field_grid(fields):
+    if not fields:
+        st.caption("No fields extracted.")
+        return
+    markup = '<div class="rg-field-grid">'
+    for key, value in list(fields.items())[:15]:
+        label = str(key).replace('_', ' ').title()
+        text = json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else str(value)
+        cls = ' wrap' if len(text) > 42 else ''
+        markup += f'<div class="rg-field"><div class="rg-field-k">{esc(label)}</div><div class="rg-field-v{cls}" title="{esc(text)}">{esc(text)}</div></div>'
+    markup += '</div>'
+    st.markdown(markup, unsafe_allow_html=True)
+
+
+def render_status_grid(items):
+    markup = '<div class="rg-status-grid">'
+    for key, value in items.items():
+        markup += f'<div class="rg-status-tile"><span>{esc(key)}</span><b>{esc(value)}</b></div>'
+    markup += '</div>'
+    st.markdown(markup, unsafe_allow_html=True)
+
+
+def render_mapping_grid(rows):
+    markup = '<div class="rg-mapping-grid">'
+    for row in rows:
+        dst = row.get("Mapped to") or "Not required"
+        unmapped = dst == "Not required for this workflow"
+        cls = ' unmapped' if unmapped else ''
+        markup += f'<div class="rg-map-card{cls}"><div class="rg-map-src" title="{esc(row.get("Source column"))}">{esc(row.get("Source column"))}</div><div class="rg-map-arrow">→</div><div class="rg-map-dst" title="{esc(dst)}">{esc(dst)}</div></div>'
+    markup += '</div>'
+    st.markdown(markup, unsafe_allow_html=True)
+
+
+def render_quality_visual(report):
+    quality = float(report.get("quality_score") or 0)
+    clean = int(report.get("clean_delivered_rows") or report.get("historical_rows") or 0)
+    vendors = int(report.get("vendors") or 0)
+    categories = int(report.get("categories") or 0)
+    excluded = int(report.get("delivered_rows", 0) or 0) - int(report.get("clean_delivered_rows", 0) or 0)
+    q = max(0, min(100, quality))
+    markup = (
+        f'<div class="rg-quality"><div class="rg-quality-ring" style="background:conic-gradient(#42d6a4 0 {q:.1f}%,rgba(73,96,119,.18) {q:.1f}% 100%)"><div><b>{quality:.0f}%</b><span>quality</span></div></div>'
+        f'<div class="rg-quality-stats"><div class="rg-quality-stat"><span>Clean history</span><b>{clean:,}</b></div><div class="rg-quality-stat"><span>Suppliers</span><b>{vendors}</b></div><div class="rg-quality-stat"><span>Categories</span><b>{categories}</b></div><div class="rg-quality-stat"><span>Excluded outcomes</span><b>{max(0,excluded)}</b></div></div></div>'
+    )
+    st.markdown(markup, unsafe_allow_html=True)
+
+
+def render_supplier_cards(df):
+    if df is None or df.empty:
+        return
+    top = df.sort_values("Supplier health score", ascending=False).head(5)
+    markup = '<div class="rg-supplier-cards">'
+    for _, row in top.iterrows():
+        score = float(row.get("Supplier health score") or 0)
+        completion = float(row.get("Completion rate") or 0) * 100
+        compliance = float(row.get("Compliance rate") or 0) * 100 if pd.notna(row.get("Compliance rate")) else 0
+        lead = float(row.get("Avg lead time days") or 0) if pd.notna(row.get("Avg lead time days")) else 0
+        markup += f'<div class="rg-supplier-card"><div class="rg-supplier-name" title="{esc(row.get("Supplier"))}">{esc(row.get("Supplier"))}</div><div class="rg-supplier-score">{score:.0f}<small>/100</small></div><div class="rg-supplier-meter"><span style="width:{max(0,min(100,score)):.0f}%"></span></div><div class="rg-supplier-meta">{completion:.0f}% completion · {compliance:.0f}% compliance<br>{lead:.1f}d avg lead time</div></div>'
+    markup += '</div>'
+    st.markdown(markup, unsafe_allow_html=True)
+
+
+def render_approval_flow():
+    st.markdown('<div class="rg-approval-flow"><div class="rg-approval-step"><span>01 · Detect</span><b>Risk crosses threshold</b></div><div class="rg-approval-step"><span>02 · Draft</span><b>Agent prepares action</b></div><div class="rg-approval-step"><span>03 · Decide</span><b>Human reviews / edits</b></div><div class="rg-approval-step"><span>04 · Execute</span><b>Controlled + audited</b></div></div>', unsafe_allow_html=True)
 
 
 def risk_chip(level):
@@ -366,11 +490,12 @@ def render_drivers(drivers):
     if not drivers:
         st.caption("No risk drivers available.")
         return
-    html = ""
-    for d in drivers:
+    markup = '<div class="rg-driver-grid">'
+    for d in drivers[:6]:
         sev = d.get("severity", "medium")
-        html += f'<div class="rg-driver {sev}"><b>{d.get("label","Signal")}</b><span>{d.get("detail","")}</span></div>'
-    st.markdown(html, unsafe_allow_html=True)
+        markup += f'<div class="rg-driver {esc(sev)}"><b>{esc(d.get("label","Signal"))}</b><span>{esc(d.get("detail",""))}</span></div>'
+    markup += '</div>'
+    st.markdown(markup, unsafe_allow_html=True)
 
 
 def render_timeline(events):
@@ -531,8 +656,8 @@ def render_dashboard_summary(scores, high, med, low, critical, late, ctx=None):
     st.markdown(f'<div class="rg-dashboard-grid" style="grid-template-columns:1.35fr .65fr;margin-top:0"><div class="rg-dashboard-panel" style="min-height:180px"><div class="rg-dash-panel-title">Recent project signals</div><div class="rg-dash-panel-sub">Latest linked material and supplier events</div>{event_html}</div><div class="rg-dashboard-panel" style="min-height:180px"><div class="rg-dash-panel-title">Control state</div><div class="rg-dash-panel-sub">Decision support remains human governed</div><div class="rg-compact-stat-row" style="grid-template-columns:1fr 1fr"><div class="rg-compact-stat"><span>Forecast late</span><b>{late}</b></div><div class="rg-compact-stat"><span>Severe slips</span><b>{severe}</b></div><div class="rg-compact-stat"><span>At risk</span><b>{high+med}</b></div><div class="rg-compact-stat"><span>Approval</span><b>Human</b></div></div></div></div>',unsafe_allow_html=True)
 
 def render_top_shell(health_ok):
-    status = '<span class="rg-status"><span class="rg-status-dot"></span>System live</span>' if health_ok else '<span class="rg-status" style="border-color:rgba(239,68,68,.28);background:rgba(239,68,68,.08);color:#fecaca"><span class="rg-status-dot" style="background:#ef4444"></span>Backend unavailable</span>'
-    st.markdown(f'<div class="rg-topbar"><div class="rg-brand"><div class="rg-logo">R</div><div><div class="rg-brand-title">ROJ Guard</div><div class="rg-brand-sub">Predictive procurement intelligence • live construction control tower</div></div></div><div class="rg-status-wrap"><span class="rg-control-pill">Bangalore Hyperscale DC • Phase 1</span><span class="rg-control-pill">AI + ML online</span>{status}<span class="rg-trust">Human-governed execution</span></div></div>', unsafe_allow_html=True)
+    status = '<span class="rg-status"><span class="rg-status-dot"></span>Live</span>' if health_ok else '<span class="rg-status" style="border-color:rgba(239,68,68,.28);background:rgba(239,68,68,.08);color:#fecaca"><span class="rg-status-dot" style="background:#ef4444"></span>Offline</span>'
+    st.markdown(f'<div class="rg-topbar"><div class="rg-brand"><div class="rg-logo">R</div><div><div class="rg-brand-title">ROJ Guard</div><div class="rg-brand-sub">Predictive procurement control tower</div></div></div><div class="rg-status-wrap"><span class="rg-control-pill">Active project portfolio</span>{status}<span class="rg-trust">Human approval on</span></div></div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
 # Top application shell / global status
@@ -556,7 +681,7 @@ with st.expander("System controls", expanded=False):
             if result and result.get("status") == "trained":
                 st.success(f"MAE {result['lead_time_model_mae_days']}d • AUC {result['risk_classifier_auc']}")
     with cc3:
-        st.caption("Controls are intentionally secondary. The main navigation is optimized for evaluator workflows on desktop and mobile.")
+        st.caption("Admin-only model controls.")
 
 # ---------------------------------------------------------------------------
 # DASHBOARD
@@ -586,7 +711,11 @@ if page == "Dashboard":
         display["miss_roj_probability"] = (display["miss_roj_probability"]*100).round(0).astype(int).astype(str)+"%"
         display = display[["material_name","po_sku","vendor_name","risk_level","miss_roj_probability","predicted_arrival_date","roj_date","predicted_delay_days","is_critical_path"]]
         display.columns = ["Material","PO / SKU","Vendor","Risk","Miss ROJ","Forecast arrival","ROJ","Delay (days)","Critical path"]
-        st.dataframe(display,use_container_width=True,hide_index=True,height=390,column_config={"Material":st.column_config.TextColumn(width="medium"),"PO / SKU":st.column_config.TextColumn(width="medium",help="Purchase-order number and unique material SKU"),"Vendor":st.column_config.TextColumn(width="medium"),"Risk":st.column_config.TextColumn(width="small"),"Miss ROJ":st.column_config.TextColumn(width="small"),"Critical path":st.column_config.CheckboxColumn(width="small")})
+        table_cfg={"Material":st.column_config.TextColumn(width="medium"),"PO / SKU":st.column_config.TextColumn(width="medium",help="Purchase-order number and unique material SKU"),"Vendor":st.column_config.TextColumn(width="medium"),"Risk":st.column_config.TextColumn(width="small"),"Miss ROJ":st.column_config.TextColumn(width="small"),"Critical path":st.column_config.CheckboxColumn(width="small")}
+        st.dataframe(display.head(12),use_container_width=True,hide_index=True,height=340,column_config=table_cfg)
+        if len(display) > 12:
+            with st.expander(f"View all {len(display)} active material lines"):
+                st.dataframe(display,use_container_width=True,hide_index=True,height=390,column_config=table_cfg)
         if ctx:
             c1,c2=st.columns([1.15,.85])
             with c1:
@@ -602,14 +731,9 @@ if page == "Dashboard":
 # INCOMING INTELLIGENCE
 # ---------------------------------------------------------------------------
 elif page == "Incoming Intelligence":
-    header("AI document intelligence", "Incoming intelligence", "Analyze a vendor email or project document, review the extracted entities, then apply the signal to the project. No Swagger or JSON API work is required.")
-    render_3d_hero("Unstructured supplier updates become structured project signals.", "Documents, emails and logistics messages flow into one entity-linked intelligence layer before any signal is allowed to affect project risk.", [("Input", "Email / PDF"), ("Extraction", "Gemini"), ("Review", "Human"), ("Graph", "Controlled")], mode="ingest", compact=True)
-    render_glass_banner(
-        "Turn an unstructured supplier update into project intelligence.",
-        "Paste a vendor message or upload a PDF. ROJ Guard extracts the entities and schedule signal first, then asks a human to confirm the result before anything touches the project graph.",
-        ["Gemini extraction", "Confidence score", "Human confirmation", "Safe fallback"],
-        eyebrow="AI ingestion workspace",
-    )
+    render_page_intro("AI signal ingestion", "Incoming intelligence", "Drop in a vendor email or PDF. ROJ Guard extracts the operational signal, shows confidence, and waits for human confirmation before updating project risk.", ["Email / PDF", "Gemini extraction", "Human confirm", "Graph update"])
+    incoming_active = 4 if st.session_state.get("extraction_apply") else (2 if st.session_state.get("extraction_preview") else 0)
+    render_process_strip([("Input","Text or PDF"),("Extract","Entities + dates"),("Review","Human confirm"),("Link","Project context"),("Re-score","ROJ risk")], active=incoming_active)
     projects = api_get("/api/experience/projects") or []
     if not projects:
         st.error("No project exists in the database.")
@@ -655,8 +779,7 @@ elif page == "Incoming Intelligence":
             c1, c2 = st.columns([.72, .28])
             with c1:
                 fields = preview.get("extracted_fields") or {}
-                rows = [{"Field": k.replace("_", " ").title(), "Extracted value": v} for k, v in fields.items()]
-                st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+                render_field_grid(fields)
             with c2:
                 st.markdown(f'<div class="rg-card"><div class="rg-kpi-label">Extraction confidence</div><div class="rg-kpi-value">{conf*100:.0f}%</div><div class="rg-confidence"><div style="width:{conf*100:.0f}%"></div></div><div class="rg-note" style="margin-top:10px">{"Human confirmation recommended" if preview.get("requires_human_confirmation") else "Ready for confirmation"}</div></div>', unsafe_allow_html=True)
                 if preview.get("notes"):
@@ -707,23 +830,9 @@ elif page == "Incoming Intelligence":
 # REAL DATA LAB
 # ---------------------------------------------------------------------------
 elif page == "Real Data Lab":
-    header(
-        "Bring your own procurement data",
-        "Real Data Lab",
-        "Upload a CSV/XLSX export. ROJ Guard detects whether it contains project ROJ data or procurement history, validates the schema, learns from legitimate historical outcomes, and keeps model provenance explicit.",
-    )
-    render_3d_hero(
-        "Turn unfamiliar procurement exports into decision-ready intelligence.",
-        "The lab supports two honest workflows: direct ROJ project scoring when schedule fields exist, or Historical Procurement Mode when the file contains order/delivery history but no ROJ dates.",
-        [("Input", "CSV / XLSX"), ("Mapping", "Automatic"), ("Quality", "Validated"), ("Models", "Isolated")],
-        mode="ingest", compact=True,
-    )
-    render_glass_banner(
-        "Real data stays isolated from the deterministic demo baseline.",
-        "Nothing here overwrites roj_guard.db or the baseline hackathon models. Historical Procurement Mode trains a separate order-to-delivery XGBoost model and converts its forecast into ROJ risk only after you provide a real project ROJ date.",
-        ["Schema mapping", "Supplier KPIs", "Leakage-reduced history", "Scenario prediction"],
-        eyebrow="BYOD • safe evaluation workspace",
-    )
+    render_page_intro("Bring your own data", "Real Data Lab", "Upload a company procurement export. The lab maps the schema, validates outcomes, learns supplier lead-time behavior, and keeps real-data models isolated from the prepared demo.", ["CSV / XLSX", "Auto-map", "Quality gate", "Real XGBoost", "ROJ scenario"])
+    lab_active = 4 if (st.session_state.get("real_proc_prediction") is not None or st.session_state.get("real_predictions") is not None) else (3 if (st.session_state.get("real_proc_bundle") is not None or st.session_state.get("real_model_bundle") is not None) else (2 if st.session_state.get("real_validation") is not None else (1 if st.session_state.get("real_mapping") is not None else 0)))
+    render_process_strip([("Upload","Company export"),("Map","Auto schema"),("Validate","Quality gate"),("Learn","Real history"),("Predict","New ROJ")], active=lab_active)
 
     intro_a, intro_b = st.columns([0.76, 0.24])
     with intro_a:
@@ -754,9 +863,9 @@ elif page == "Real Data Lab":
         st.markdown('<div class="rg-section">Supported real-data workflows</div>', unsafe_allow_html=True)
         a, b = st.columns(2)
         with a:
-            st.markdown("""<div class="rg-card"><div class="rg-eyebrow">Project ROJ mode</div><div style="font-weight:820;color:white;margin:7px 0">Score active project materials</div><div class="rg-note">Best when the export contains supplier, material, ROJ date, PO/shipment context and current status. Historical rows can retrain the full miss-ROJ classifier when actual outcomes are available.</div></div>""", unsafe_allow_html=True)
+            st.markdown("""<div class="rg-card"><div class="rg-eyebrow">Project ROJ mode</div><div style="font-weight:820;color:white;margin:7px 0">Score current materials</div><div class="rg-note">Use when ROJ and live project fields are present.</div></div>""", unsafe_allow_html=True)
         with b:
-            st.markdown("""<div class="rg-card"><div class="rg-eyebrow">Historical procurement mode</div><div style="font-weight:820;color:white;margin:7px 0">Learn real lead-time + supplier behavior</div><div class="rg-note">Works when there is no ROJ column. Uses clean Delivered orders to train a real order-to-delivery model, builds supplier quality/compliance intelligence, then lets you enter an ROJ for a new procurement scenario.</div></div>""", unsafe_allow_html=True)
+            st.markdown("""<div class="rg-card"><div class="rg-eyebrow">Historical procurement mode</div><div style="font-weight:820;color:white;margin:7px 0">Learn supplier lead time</div><div class="rg-note">No ROJ needed until the prediction scenario.</div></div>""", unsafe_allow_html=True)
     else:
         file_bytes = uploaded_real.getvalue()
         signature = hashlib.sha1(file_bytes).hexdigest()
@@ -849,12 +958,9 @@ elif page == "Real Data Lab":
                         "Confidence": "—",
                     })
 
-            st.dataframe(
-                pd.DataFrame(mapping_preview),
-                use_container_width=True,
-                hide_index=True,
-                height=min(390, 38 + 35 * max(1, len(mapping_preview))),
-            )
+            render_mapping_grid(mapping_preview)
+            with st.expander("View mapping table"):
+                st.dataframe(pd.DataFrame(mapping_preview), use_container_width=True, hide_index=True, height=min(390, 38 + 35 * max(1, len(mapping_preview))))
 
             unresolved = [c for c in raw_real.columns if c not in mapped_sources]
             if unresolved:
@@ -975,15 +1081,9 @@ elif page == "Real Data Lab":
             if report:
                 mode = report.get("mode", "generic")
                 if mode == "procurement_history":
-                    st.markdown('<div class="rg-section">3 • Historical Procurement Mode</div>', unsafe_allow_html=True)
-                    st.success("Procurement history detected. ROJ dates are not present, so ROJ Guard will learn real order-to-delivery behavior first and will request an ROJ only when you create a prediction scenario.")
-                    qa, qb, qc, qd, qe = st.columns(5)
-                    qa.markdown(kpi_card("Quality", f'{report["quality_score"]}%', "Core procurement fields"), unsafe_allow_html=True)
-                    qb.markdown(kpi_card("Clean delivered", f'{report["clean_delivered_rows"]:,}', "Eligible real outcomes"), unsafe_allow_html=True)
-                    qc.markdown(kpi_card("Suppliers", report["vendors"], "Supplier population"), unsafe_allow_html=True)
-                    qd.markdown(kpi_card("Categories", report["categories"], "Procurement classes"), unsafe_allow_html=True)
-                    comp = report.get("compliance_rate")
-                    qe.markdown(kpi_card("Compliance", f'{comp*100:.1f}%' if comp is not None else "—", "Observed source field"), unsafe_allow_html=True)
+                    st.markdown('<div class="rg-section">3 • Historical procurement detected</div>', unsafe_allow_html=True)
+                    st.caption("No historical ROJ column is required here. ROJ Guard learns order-to-delivery behavior first and asks for a project ROJ only when you create a new scenario.")
+                    render_quality_visual(report)
 
                     for err in report.get("errors", []): st.error(err)
                     for warn in report.get("warnings", []): st.warning(warn)
@@ -991,14 +1091,14 @@ elif page == "Real Data Lab":
                     # Data-quality evidence and order-state composition.
                     left_q, right_q = st.columns([.46, .54])
                     with left_q:
-                        st.markdown('<div class="rg-card"><div class="rg-panel-title">Data cleaning trace</div><div class="rg-panel-sub">What is and is not allowed into supervised lead-time training</div>', unsafe_allow_html=True)
-                        clean_rows = report.get("clean_delivered_rows", 0)
-                        st.markdown(f"**{clean_rows:,}** rows pass: `Delivered` + valid Order Date + valid Delivery Date + non-negative lead time.")
-                        st.markdown(f"- Delivered status rows: **{report.get('delivered_rows', 0):,}**")
-                        st.markdown(f"- Missing Delivery Date: **{report.get('missing_delivery_dates', 0):,}**")
-                        st.markdown(f"- Invalid order→delivery sequence: **{report.get('invalid_order_delivery_rows', 0):,}**")
-                        st.markdown("- Cancelled / pending / partial rows remain available for supplier KPIs but are **not** used as completed lead-time targets.")
-                        st.markdown('</div>', unsafe_allow_html=True)
+                        st.markdown('<div class="rg-panel-title">Training eligibility</div><div class="rg-panel-sub">Only legitimate completed outcomes reach supervised training</div>', unsafe_allow_html=True)
+                        render_status_grid({
+                            "Eligible delivered": f'{report.get("clean_delivered_rows",0):,}',
+                            "Delivered status": f'{report.get("delivered_rows",0):,}',
+                            "Missing delivery date": f'{report.get("missing_delivery_dates",0):,}',
+                            "Invalid chronology": f'{report.get("invalid_order_delivery_rows",0):,}',
+                        })
+                        st.caption("Pending, partial and cancelled orders remain available for supplier KPIs, not as completed lead-time targets.")
                     with right_q:
                         status_chart = pd.DataFrame({"Orders": [
                             report.get("delivered_rows", 0), report.get("pending_rows", 0),
@@ -1012,6 +1112,7 @@ elif page == "Real Data Lab":
                     category_kpis = build_category_intelligence(normalized)
                     if not supplier_kpis.empty:
                         sleft, sright = st.columns([1.18, .82])
+                        render_supplier_cards(supplier_kpis)
                         with sleft:
                             table = supplier_kpis.copy()
                             for col in ["Completion rate", "Compliance rate", "Defect rate", "Weighted savings rate"]:
@@ -1019,7 +1120,8 @@ elif page == "Real Data Lab":
                             for col in ["Avg lead time days", "Median lead time days", "P90 lead time days", "Supplier health score"]:
                                 table[col] = pd.to_numeric(table[col], errors="coerce").round(1)
                             show_cols = ["Supplier", "Orders", "Clean delivered", "Completion rate", "Compliance rate", "Defect rate", "Weighted savings rate", "Avg lead time days", "P90 lead time days", "Supplier health score"]
-                            st.dataframe(table[show_cols], use_container_width=True, hide_index=True, height=300)
+                            with st.expander("View supplier KPI table"):
+                                st.dataframe(table[show_cols], use_container_width=True, hide_index=True, height=300)
                         with sright:
                             lead_chart = supplier_kpis.set_index("Supplier")[["Avg lead time days", "P90 lead time days"]].copy()
                             st.markdown('<div class="rg-panel-title">Supplier lead-time profile</div><div class="rg-panel-sub">Observed clean Delivered history</div>', unsafe_allow_html=True)
@@ -1030,7 +1132,7 @@ elif page == "Real Data Lab":
                             dl2.download_button("Download category lead-time CSV", category_kpis.to_csv(index=False).encode("utf-8"), "roj_guard_category_lead_times.csv", "text/csv", use_container_width=True)
 
                     st.markdown('<div class="rg-section">5 • Train real procurement lead-time model</div>', unsafe_allow_html=True)
-                    st.markdown("""<div class="rg-card"><div class="rg-eyebrow">Real supervised target</div><div style="font-size:.98rem;color:white;font-weight:820;margin:6px 0">Order Date → Actual Delivery Date</div><div class="rg-note">Only clean Delivered rows create the target. The model uses supplier/category/commercial context plus prior supplier history. A temporal 80/20 holdout is used; no historical ROJ classifier is fabricated.</div></div>""", unsafe_allow_html=True)
+                    st.markdown("""<div class="rg-card"><div class="rg-eyebrow">Real supervised target</div><div style="font-size:.98rem;color:white;font-weight:820;margin:6px 0">Order date → actual delivery</div><div class="rg-note">Clean Delivered rows · prior supplier history · temporal 80/20 holdout.</div></div>""", unsafe_allow_html=True)
                     if st.button("Train Lead-Time Model on Real Data", type="primary", use_container_width=True, disabled=report.get("clean_delivered_rows", 0) < 50):
                         with st.spinner("Building leakage-reduced supplier history → temporal holdout → training XGBoost lead-time model..."):
                             trained = train_procurement_lead_time_model(normalized)
@@ -1108,9 +1210,8 @@ elif page == "Real Data Lab":
                             c4.markdown(kpi_card("Forecast margin", f'{pred["Forecast margin days"]:+d}d', "Positive = before ROJ"), unsafe_allow_html=True)
                             c5.markdown(kpi_card("Supplier health", f'{pred["Supplier health score"]:.0f}/100', "Composite observed KPI"), unsafe_allow_html=True)
                             st.caption(f'Statistical P(miss ROJ) {pred["Statistical miss probability"]*100:.1f}% • estimated schedule-impact probability {pred["Schedule impact probability"]*100:.1f}% • forecast uncertainty σ≈{pred["Uncertainty sigma days"]:.1f}d.')
-                            st.markdown('<div class="rg-section">Why this scenario received that risk</div>', unsafe_allow_html=True)
-                            for d in pred["Drivers"]:
-                                st.markdown(f'<div class="rg-driver"><b>{d}</b></div>', unsafe_allow_html=True)
+                            st.markdown('<div class="rg-section">Why this risk</div>', unsafe_allow_html=True)
+                            render_drivers([{"label": d, "detail": "", "severity": "medium"} for d in pred["Drivers"]])
 
                             st.markdown('<div class="rg-section">Supplier what-if comparison</div>', unsafe_allow_html=True)
                             compare = compare_supplier_scenarios(bundle, **st.session_state["real_proc_scenario"])
@@ -1183,8 +1284,7 @@ elif page == "Real Data Lab":
 # MATERIAL INTELLIGENCE
 # ---------------------------------------------------------------------------
 elif page == "Material Intelligence":
-    header("Layer 3 + 4 • Explainable risk", "Material intelligence", "Inspect the forecast, live risk drivers, vendor context, schedule exposure, and mitigation actions for a single material line.")
-    render_3d_hero("One material. Every signal. One risk state.", "ROJ Guard fuses vendor history, shipment state, schedule constraints and live communications into a continuously explainable material risk profile.", [("Risk", "Live"), ("Forecast", "Dynamic"), ("Drivers", "Explainable"), ("Actions", "3 agents")], mode="material", compact=True)
+    render_page_intro("Material control", "Material intelligence", "Select one procurement line to see its live risk, forecast, supplier context, schedule exposure and available mitigation actions.", ["Live risk", "Forecast", "Drivers", "Mitigation"])
     items, labels = material_options()
     if not items:
         st.info("No active materials available.")
@@ -1237,7 +1337,7 @@ elif page == "Material Intelligence":
                     "Critical path": "Yes" if sched.get("is_critical_path") else "No",
                     "Latest vendor signal": (ctx.get("latest_vendor_signal") or {}).get("summary") or "—",
                 }
-                st.dataframe(pd.DataFrame([{"Field":k,"Value":v} for k,v in state_rows.items()]), use_container_width=True, hide_index=True)
+                render_status_grid(state_rows)
                 st.markdown('<div class="rg-section">Activity timeline</div>', unsafe_allow_html=True)
                 render_timeline(ctx.get("activity", []))
 
@@ -1245,9 +1345,8 @@ elif page == "Material Intelligence":
 # PROJECT GRAPH
 # ---------------------------------------------------------------------------
 elif page == "Project Graph":
-    render_3d_hero("A project graph built for decisions, not decoration.", "Trace every material from project and vendor context through purchase order, shipment and Required-On-Job constraints. Risk intelligence stays attached to the entities that created it.", [("Graph layer", "Live"), ("Entity linking", "Active"), ("Risk context", "Attached")], accent="#38bdf8", mode="graph")
-    header("Layer 2 • Project graph", "Project graph", "A material-centric projection of the entities ROJ Guard links together. The same contract maps naturally onto Kaya/Amber's existing project graph.")
-    render_glass_banner("Context travels with the material.", "Every forecast is anchored to the project entities that created it — material, vendor, PO, shipment and ROJ. That gives the risk engine traceable context and makes the output easier to audit.", ["Entity-linked", "Traceable", "Kaya / Amber compatible"], eyebrow="Graph intelligence")
+    render_page_intro("Entity-linked context", "Project graph", "Trace a material across project, vendor, purchase order, shipment and Required-On-Job context. Risk remains attached to the entities that created it.", ["Traceable", "Material-centric", "Kaya / Amber ready"])
+    render_3d_hero("Connected context behind every risk score.", "Material, vendor, PO, shipment and ROJ relationships remain visible and auditable.", [("Graph", "Live"), ("Links", "Active"), ("Risk", "Attached")], accent="#38bdf8", mode="graph", compact=True)
     items, labels = material_options()
     if items:
         selected = st.selectbox("Material graph", [x["material_id"] for x in items], format_func=lambda x: labels[x])
@@ -1263,21 +1362,22 @@ elif page == "Project Graph":
                     html += '<div class="rg-edge"><div class="arrow">→</div><div class="label">linked context</div></div>'
             html += '</div>'
             st.markdown(html, unsafe_allow_html=True)
-            st.markdown('<div class="rg-section">Graph relationships</div>', unsafe_allow_html=True)
             node_lookup = {n["id"]: n for n in graph.get("nodes",[])}
             edge_rows=[]
             for e in graph.get("edges",[]):
                 edge_rows.append({"From": node_lookup.get(e["source"],{}).get("type","Node"), "Relationship": e["label"], "To": node_lookup.get(e["target"],{}).get("type","Node")})
-            st.dataframe(pd.DataFrame(edge_rows), use_container_width=True, hide_index=True)
-            st.markdown("""<div class="rg-card"><div class="rg-eyebrow">Kaya / Amber integration</div><div style="color:white;font-weight:780;margin:6px 0">ROJ Guard is a specialist intelligence module, not a replacement graph.</div><div class="rg-note">In a Kaya deployment, these material/vendor/PO/shipment/ROJ entities can be consumed from Amber's project graph while ROJ Guard contributes forecast risk, explanations and mitigation actions back into the workflow.</div></div>""", unsafe_allow_html=True)
+            with st.expander("View relationship details"):
+                st.dataframe(pd.DataFrame(edge_rows), use_container_width=True, hide_index=True)
+            st.markdown("""<div class="rg-card"><div class="rg-eyebrow">Kaya / Amber fit</div><div style="color:white;font-weight:780;margin:6px 0">Specialist procurement-risk intelligence on top of the project graph.</div><div class="rg-note">Consume connected entities; return forecast risk, explanations and mitigation actions.</div></div>""", unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
 # LIVE DEMO
 # ---------------------------------------------------------------------------
 elif page == "Live Demo":
-    header("60-second judge scenario", "Live risk reaction demo", "One deterministic scenario demonstrates the entire Round-1 promise: a healthy material receives a vendor delay signal, risk changes immediately, and an agent prepares mitigation for human approval.")
-    render_3d_hero("Watch a vendor signal travel through the project intelligence graph.", "A 14-day supplier delay propagates from communication to material context, forecast, ROJ risk and finally a human-governed mitigation action.", [("Before", "4% Low"), ("Signal", "+14 days"), ("After", "90% High"), ("Action", "Escalate")], mode="demo", compact=True)
-    render_glass_banner("Watch one supplier signal propagate through the whole system.", "This scenario is deterministic by design: it starts with a healthy material, injects a 14-day vendor delay, recomputes ROJ risk and automatically prepares a mitigation draft for human approval.", ["4% → 90%", "14-day signal", "Agent draft", "Human approval"], eyebrow="Live scenario armed")
+    render_page_intro("Judge-ready scenario", "Live risk reaction", "One supplier delay demonstrates the full loop: signal → entity link → risk change → mitigation draft → human-approved execution.", ["4% Low", "+14 days", "90% High", "Human approval"])
+    demo_active = 4 if st.session_state.get("demo_execution") else (3 if st.session_state.get("demo_result") else 0)
+    render_process_strip([("Signal","+14d vendor"),("Link","Project graph"),("Predict","ROJ risk"),("Draft","Mitigation"),("Approve","Human")], active=demo_active)
+    render_3d_hero("A supplier signal becomes schedule risk.", "Watch the 14-day vendor delay propagate through project context and trigger mitigation.", [("Before", "4%"), ("Signal", "+14d"), ("After", "90%"), ("Action", "Drafted")], mode="demo", compact=True)
 
     top_a, top_b = st.columns([.72,.28])
     with top_b:
@@ -1298,7 +1398,7 @@ elif page == "Live Demo":
             st.warning(scenario.get("message","Reset Demo Mode to restore a Low-risk baseline."))
 
     if scenario and scenario.get("ready") and not existing_demo:
-        st.markdown('<div class="rg-section">What will happen</div>', unsafe_allow_html=True)
+        st.markdown('<div class="rg-section">Scenario preview</div>', unsafe_allow_html=True)
         render_before_after(
             scenario["before"],
             {"summary": scenario["signal"], "delay_days":14},
@@ -1321,9 +1421,9 @@ elif page == "Live Demo":
         with c1:
             st.markdown('<div class="rg-section">Agent response</div>', unsafe_allow_html=True)
             st.markdown(f'<div class="rg-card"><div class="rg-eyebrow">Human approval required</div><div style="font-size:1.05rem;color:white;font-weight:800;margin:6px 0">Vendor escalation prepared automatically</div><div class="rg-note">{action.get("reasoning","")}</div></div>', unsafe_allow_html=True)
-            edited = st.text_area("Draft escalation", value=action.get("draft_content", ""), height=235, key="demo_draft")
+            edited = st.text_area("Draft escalation", value=re.sub(r"\*\*(.*?)\*\*", r"\1", action.get("draft_content", "")), height=235, key="demo_draft")
             if not st.session_state.get("demo_execution"):
-                if st.button("Approve & Execute", type="primary", use_container_width=True):
+                if st.button("Approve & Send Escalation", type="primary", use_container_width=True):
                     if edited != action.get("draft_content"):
                         api_patch(f"/api/actions/{action['action_id']}", {"draft_content": edited})
                     execution = api_post(f"/api/actions/{action['action_id']}/approve", params={"reviewed_by":"hackathon_judge"})
@@ -1350,9 +1450,8 @@ elif page == "Live Demo":
 # APPROVAL CENTER
 # ---------------------------------------------------------------------------
 elif page == "Approval Center":
-    header("Layer 4 • Human-in-the-loop", "Approval center", "Review, edit, approve or reject AI-drafted mitigation actions. Execution receipts remain visible for auditability.")
-    render_3d_hero("AI can prepare the move. People still authorize it.", "Every vendor escalation, resequencing proposal and alternate-supplier intervention crosses an explicit approval boundary before execution.", [("Drafts", "Editable"), ("Approval", "Required"), ("Execution", "Controlled"), ("Audit", "Retained")], mode="approval", compact=True)
-    render_glass_banner("AI prepares. People decide.", "ROJ Guard can draft escalation, resequencing and alternate-supplier actions, but the execution boundary remains explicit: review, edit, approve or reject — with a retained audit record.", ["Human approval", "Editable drafts", "Execution receipts", "Audit trail"], eyebrow="Governance layer")
+    render_page_intro("Human-governed action", "Approval center", "AI prepares mitigation; a person still reviews, edits and authorizes every consequential action before controlled execution.", ["Editable drafts", "Explicit approval", "Execution receipt", "Audit trail"])
+    render_approval_flow()
     pending = api_get("/api/actions/pending") or []
     materials, label_map = material_options()
     name_map = {m["material_id"]: m["material_name"] for m in materials}
@@ -1373,10 +1472,11 @@ elif page == "Approval Center":
         label = ACTION_LABELS.get(action["action_type"], action["action_type"])
         with st.expander(f'{label} • {material_name} • {action.get("risk_level_at_creation","—")} risk'):
             st.caption(action.get("reasoning") or "AI mitigation recommendation")
-            edited = st.text_area("Draft content", action.get("draft_content", ""), height=190, key=f'approval_{action["action_id"]}')
+            edited = st.text_area("Draft content", re.sub(r"\*\*(.*?)\*\*", r"\1", action.get("draft_content", "")), height=190, key=f'approval_{action["action_id"]}')
             a, b = st.columns(2)
+            approve_label = {"ESCALATION":"Approve & Send", "RESEQUENCE":"Approve Plan", "ALTERNATE_SUPPLIER":"Approve Sourcing Request"}.get(action.get("action_type"), "Approve & Execute")
             with a:
-                if st.button("Approve & Execute", type="primary", key=f'ok_{action["action_id"]}', use_container_width=True):
+                if st.button(approve_label, type="primary", key=f'ok_{action["action_id"]}', use_container_width=True):
                     if edited != action.get("draft_content"):
                         api_patch(f'/api/actions/{action["action_id"]}', {"draft_content": edited})
                     result = api_post(f'/api/actions/{action["action_id"]}/approve', params={"reviewed_by":"procurement_manager"})
@@ -1401,7 +1501,11 @@ elif page == "Approval Center":
                 "Created": str(h.get("created_at",""))[:19],
                 "Receipt": ex.get("output_path","—"),
             })
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True, height=360)
+        audit_df = pd.DataFrame(rows)
+        st.dataframe(audit_df.head(10), use_container_width=True, hide_index=True, height=min(360, 42 + 32 * max(1, min(10, len(audit_df)))))
+        if len(audit_df) > 10:
+            with st.expander(f"View full audit trail ({len(audit_df)} actions)"):
+                st.dataframe(audit_df, use_container_width=True, hide_index=True, height=360)
 
 
 st.markdown('<div class="rg-footer"><span>ROJ Guard • Spatial predictive procurement intelligence</span><span>Kaya AI IIT India Hackathon 2026 • Predict early. Act safely.</span></div>', unsafe_allow_html=True)
