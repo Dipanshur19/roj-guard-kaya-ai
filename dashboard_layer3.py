@@ -805,46 +805,152 @@ elif page == "Real Data Lab":
             with st.expander("Preview uploaded rows", expanded=False):
                 st.dataframe(raw_real.head(25), use_container_width=True, hide_index=True)
 
-            st.markdown('<div class="rg-section">2 • Schema mapping</div>', unsafe_allow_html=True)
+            st.markdown('<div class="rg-section">2 • Automatic mapping</div>', unsafe_allow_html=True)
+
+            # Keep the default path compact: confirm the automatic interpretation first,
+            # and expose the full canonical-field editor only when the user asks for it.
+            active_mapping = st.session_state.get("real_mapping", suggestions.copy())
+            mapped_sources = {src for src in active_mapping.values() if src in raw_real.columns}
+            mapped_source_count = len(mapped_sources)
+            total_source_count = len(raw_real.columns)
+            coverage_pct = (mapped_source_count / total_source_count * 100.0) if total_source_count else 0.0
+
+            st.markdown(
+                f'''<div class="rg-card" style="padding:16px 18px;margin-bottom:10px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+                        <div>
+                            <div class="rg-eyebrow">Automatic schema interpretation</div>
+                            <div style="font-size:1.04rem;font-weight:820;color:#f8fafc;margin-top:5px">{mapped_source_count}/{total_source_count} source columns understood</div>
+                            <div class="rg-note" style="margin-top:4px">ROJ Guard matched the company schema to its canonical procurement fields. Unavailable project fields are intentionally left unmapped.</div>
+                        </div>
+                        <div style="min-width:128px;text-align:right">
+                            <div style="font-size:1.55rem;font-weight:880;color:#f8fafc">{coverage_pct:.0f}%</div>
+                            <div class="rg-note">source coverage</div>
+                        </div>
+                    </div>
+                </div>''',
+                unsafe_allow_html=True,
+            )
+
             mapping_preview = []
-            for field, meta in CANONICAL_FIELDS.items():
-                src = suggestions.get(field)
-                if src:
+            source_to_field = {src: field for field, src in active_mapping.items() if src in raw_real.columns}
+            for source_col in raw_real.columns:
+                field = source_to_field.get(source_col)
+                if field:
                     mapping_preview.append({
-                        "ROJ Guard field": meta["label"], "Suggested source": src,
-                        "Confidence": f"{map_conf.get(field, 0)*100:.0f}%", "Group": meta["group"],
+                        "Source column": source_col,
+                        "Mapped to": CANONICAL_FIELDS[field]["label"],
+                        "Confidence": f"{map_conf.get(field, 0)*100:.0f}%",
                     })
-            if mapping_preview:
-                st.dataframe(pd.DataFrame(mapping_preview), use_container_width=True, hide_index=True, height=260)
-            st.caption("Exact synonyms are matched first, then conservative fuzzy matching. Every source column is auto-assigned at most once.")
+                else:
+                    mapping_preview.append({
+                        "Source column": source_col,
+                        "Mapped to": "Not required for this workflow",
+                        "Confidence": "—",
+                    })
 
-            choices = ["— Not mapped —"] + list(raw_real.columns)
-            mapping_now = {}
-            groups = []
-            for meta in CANONICAL_FIELDS.values():
-                if meta["group"] not in groups:
-                    groups.append(meta["group"])
-            with st.expander("Review / correct column mapping", expanded=True):
-                for group in groups:
-                    st.markdown(f"**{group}**")
-                    fields = [f for f, meta in CANONICAL_FIELDS.items() if meta["group"] == group]
-                    grid = st.columns(3)
-                    for i, field in enumerate(fields):
-                        suggested = st.session_state["real_mapping"].get(field)
-                        current = suggested if suggested in raw_real.columns else "— Not mapped —"
-                        idx = choices.index(current) if current in choices else 0
-                        with grid[i % 3]:
-                            selected_col = st.selectbox(
-                                CANONICAL_FIELDS[field]["label"], choices, index=idx,
-                                key=f"map_{signature[:8]}_{field}",
-                            )
-                            mapping_now[field] = None if selected_col == "— Not mapped —" else selected_col
+            st.dataframe(
+                pd.DataFrame(mapping_preview),
+                use_container_width=True,
+                hide_index=True,
+                height=min(390, 38 + 35 * max(1, len(mapping_preview))),
+            )
 
-            vcol, note_col = st.columns([.28, .72])
-            with vcol:
-                validate_click = st.button("Validate & Build Dataset", type="primary", use_container_width=True)
-            with note_col:
-                st.markdown('<div class="rg-note" style="padding-top:9px">Validation is in-memory only. The uploaded dataset never replaces the prepared hackathon database.</div>', unsafe_allow_html=True)
+            unresolved = [c for c in raw_real.columns if c not in mapped_sources]
+            if unresolved:
+                st.caption(
+                    "Unassigned source columns are preserved in the upload but are not required by the detected workflow: "
+                    + ", ".join(map(str, unresolved))
+                )
+            else:
+                st.caption("All source columns were understood. Missing ROJ/project fields are not errors when the file is historical procurement data.")
+
+            editor_key = f"real_mapping_editor_open_{signature[:8]}"
+            if editor_key not in st.session_state:
+                st.session_state[editor_key] = False
+
+            action_a, action_b, action_note = st.columns([.19, .25, .56])
+            with action_a:
+                if st.button(
+                    "Edit Mapping" if not st.session_state[editor_key] else "Close Mapping",
+                    key=f"edit_mapping_{signature[:8]}",
+                    use_container_width=True,
+                ):
+                    st.session_state[editor_key] = not st.session_state[editor_key]
+                    st.rerun()
+            with action_b:
+                validate_click = st.button(
+                    "Validate & Continue",
+                    type="primary",
+                    key=f"validate_real_{signature[:8]}",
+                    use_container_width=True,
+                )
+            with action_note:
+                st.markdown(
+                    '<div class="rg-note" style="padding-top:9px">Validation is in-memory only; the prepared hackathon database and baseline models remain untouched.</div>',
+                    unsafe_allow_html=True,
+                )
+
+            mapping_now = active_mapping.copy()
+            if st.session_state[editor_key]:
+                st.markdown('<div style="height:5px"></div>', unsafe_allow_html=True)
+                with st.container(border=True):
+                    edit_head_a, edit_head_b = st.columns([.72, .28])
+                    with edit_head_a:
+                        st.markdown("#### Advanced column mapping")
+                        st.caption("Only change a field if the automatic interpretation is wrong. Optional project fields can remain unmapped.")
+                    with edit_head_b:
+                        show_optional = st.toggle(
+                            "Show unmapped optional fields",
+                            value=False,
+                            key=f"show_optional_{signature[:8]}",
+                        )
+
+                    choices = ["— Not mapped —"] + list(raw_real.columns)
+                    groups = []
+                    for meta in CANONICAL_FIELDS.values():
+                        if meta["group"] not in groups:
+                            groups.append(meta["group"])
+
+                    for group in groups:
+                        fields = [f for f, meta in CANONICAL_FIELDS.items() if meta["group"] == group]
+                        visible_fields = [f for f in fields if show_optional or mapping_now.get(f)]
+                        if not visible_fields:
+                            continue
+                        st.markdown(f"**{group}**")
+                        grid = st.columns(3)
+                        for i, field in enumerate(visible_fields):
+                            current = mapping_now.get(field)
+                            current = current if current in raw_real.columns else "— Not mapped —"
+                            idx = choices.index(current) if current in choices else 0
+                            with grid[i % 3]:
+                                selected_col = st.selectbox(
+                                    CANONICAL_FIELDS[field]["label"],
+                                    choices,
+                                    index=idx,
+                                    key=f"map_{signature[:8]}_{field}",
+                                )
+                                mapping_now[field] = None if selected_col == "— Not mapped —" else selected_col
+
+                    edit_save_a, edit_save_b = st.columns([.24, .76])
+                    with edit_save_a:
+                        if st.button("Save Mapping", key=f"save_mapping_{signature[:8]}", use_container_width=True):
+                            selected = [src for src in mapping_now.values() if src]
+                            duplicate_sources = sorted({src for src in selected if selected.count(src) > 1})
+                            if duplicate_sources:
+                                st.error(
+                                    "Each source column can map to only one ROJ Guard field. Duplicate selections: "
+                                    + ", ".join(duplicate_sources)
+                                )
+                            else:
+                                st.session_state["real_mapping"] = mapping_now.copy()
+                                st.session_state[editor_key] = False
+                                st.rerun()
+                    with edit_save_b:
+                        if st.button("Reset to Automatic Mapping", key=f"reset_mapping_{signature[:8]}"):
+                            st.session_state["real_mapping"] = suggestions.copy()
+                            st.session_state[editor_key] = False
+                            st.rerun()
 
             if validate_click:
                 try:
